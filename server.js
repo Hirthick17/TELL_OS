@@ -9,17 +9,24 @@ const db                    = require('./db');
 const { chat }              = require('./llm');
 const { getSession, getSessionByPhone, persistSession, newSessionId } = require('./sessions');
 
-// ─── Startup validation ───────────────────────────────────────────────────
-const REQUIRED_ENV = ['GEMINI_API_KEY'];
-const missing = REQUIRED_ENV.filter(k => !process.env[k] || process.env[k].includes('your_'));
+// ─── Startup validation (minimum required vars) ──────────────────────────
+const REQUIRED_ENV = ['GEMINI_API_KEY', 'META_ACCESS_TOKEN', 'META_PHONE_NUMBER_ID', 'META_VERIFY_TOKEN'];
+const missing = REQUIRED_ENV.filter(k => !process.env[k] || process.env[k].startsWith('your_'));
 if (missing.length) {
-  console.warn(`⚠️  Missing env vars: ${missing.join(', ')}`);
-  console.warn('   Chat will show error messages until these are configured.\n');
+  console.warn(`⚠️  Missing or placeholder env vars: ${missing.join(', ')}`);
 }
 
 const app        = express();
 const PORT       = process.env.PORT || 3000;
 const PUBLIC_URL = process.env.PUBLIC_URL || `http://localhost:${PORT}`;
+
+// ─── Warn loudly if dashboard URLs will be wrong ─────────────────────────
+if (!process.env.PUBLIC_URL || process.env.PUBLIC_URL.includes('localhost')) {
+  console.warn('⚠️  PUBLIC_URL not set — dashboard links will use localhost!');
+  console.warn('   Set PUBLIC_URL=https://tell-os.onrender.com in Render env vars.');
+} else {
+  console.log(`🌐 Public URL: ${PUBLIC_URL}`);
+}
 
 app.use(cors());
 app.use(express.json());
@@ -378,23 +385,35 @@ function renderDashboard(sessionId, stats, data) {
 
 // ─── Start ─────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`\n🚀 ShopBot running at http://localhost:${PORT}`);
-  console.log(`📱 Chat UI:   http://localhost:${PORT}`);
-  console.log(`📊 Dashboard: http://localhost:${PORT}/dashboard/{sessionId}\n`);
-  if (process.env.PUBLIC_URL) {
-    console.log(`🌐 Public URL: ${process.env.PUBLIC_URL} (dashboard works on mobile!)\n`);
-  }
+  console.log(`\n🚀 ShopBot running on port ${PORT}`);
+  console.log(`📱 Chat UI:   ${PUBLIC_URL}`);
+  console.log(`📊 Dashboard: ${PUBLIC_URL}/dashboard/{sessionId}\n`);
   db.connect().catch(err => {
     console.error('❌ MongoDB connection failed:', err.message);
     console.error('   Start MongoDB service first.\n');
   });
 
+  // ── Keep Render free tier awake (pings self every 14 min) ──────────────
+  // Render spins down after 15 min of inactivity — Meta webhook calls will
+  // fail silently if the server is sleeping. This prevents that.
+  if (PUBLIC_URL && !PUBLIC_URL.includes('localhost')) {
+    const PING_INTERVAL = 14 * 60 * 1000; // 14 minutes
+    setInterval(async () => {
+      try {
+        const http = require('http');
+        const https = require('https');
+        const lib = PUBLIC_URL.startsWith('https') ? https : http;
+        lib.get(`${PUBLIC_URL}/health`, (res) => {
+          console.log(`💓 Keep-alive ping → ${res.statusCode}`);
+        }).on('error', () => {}); // silent on error
+      } catch (_) {}
+    }, PING_INTERVAL);
+    console.log(`💓 Keep-alive enabled — pinging ${PUBLIC_URL}/health every 14 min`);
+  }
+
   // Start WhatsApp if enabled
   if (process.env.WHATSAPP_ENABLED === 'true') {
     const { initWhatsApp } = require('./whatsapp');
     initWhatsApp();
-  } else {
-    console.log('💡 WhatsApp not enabled. To enable: set WHATSAPP_ENABLED=true in .env');
-    console.log('   Then run: npm install whatsapp-web.js qrcode-terminal\n');
   }
 });

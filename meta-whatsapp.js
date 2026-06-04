@@ -15,7 +15,7 @@ const VERIFY_TOKEN    = process.env.META_VERIFY_TOKEN    || 'shopbot_verify_2024
 const ACCESS_TOKEN    = process.env.META_ACCESS_TOKEN;
 const PHONE_NUMBER_ID = process.env.META_PHONE_NUMBER_ID;
 const PUBLIC_URL      = process.env.PUBLIC_URL || 'http://localhost:3000';
-const API_VER         = 'v20.0';
+const API_VER         = 'v25.0';  // ← keep in sync with Meta dashboard
 const META_API_URL    = `https://graph.facebook.com/${API_VER}/${PHONE_NUMBER_ID}/messages`;
 
 // ─── Send a WhatsApp message ──────────────────────────────────────────────
@@ -32,6 +32,37 @@ async function sendMessage(to, text) {
     console.log(`📤 → ${to}: ${text.substring(0, 60).replace(/\n/g,' ')}…`);
   } catch (err) {
     console.error('❌ Send failed:', JSON.stringify(err.response?.data || err.message));
+  }
+}
+
+// ─── Send a WhatsApp template message (use to initiate conversations) ───────
+// Templates must be approved in Meta Business Manager first.
+// templateName: e.g. 'jaspers_market_plain_text_v1'
+// langCode:     e.g. 'en_US'
+async function sendTemplate(to, templateName, langCode = 'en_US', components = []) {
+  if (!ACCESS_TOKEN || !PHONE_NUMBER_ID) {
+    console.error('❌ META_ACCESS_TOKEN or META_PHONE_NUMBER_ID missing in .env');
+    return;
+  }
+  const payload = {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'template',
+    template: {
+      name: templateName,
+      language: { code: langCode },
+      ...(components.length > 0 ? { components } : {}),
+    },
+  };
+  try {
+    const { data } = await axios.post(META_API_URL, payload, {
+      headers: { Authorization: `Bearer ${ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
+    });
+    console.log(`📤 Template "${templateName}" → ${to} | msgId: ${data.messages?.[0]?.id}`);
+    return data;
+  } catch (err) {
+    console.error('❌ Template send failed:', JSON.stringify(err.response?.data || err.message));
+    throw err;
   }
 }
 
@@ -238,4 +269,4 @@ async function handleWebhook(req, res) {
   }
 }
 
-module.exports = { handleVerification, handleWebhook, sendMessage };
+module.exports = { handleVerification, handleWebhook, sendMessage, sendTemplate };
