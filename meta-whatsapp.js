@@ -148,12 +148,14 @@ async function handleTextMessage(waId, text) {
   const session = await getSessionByPhone(waId);
   const lower   = text.toLowerCase();
 
-  const YES = ['yes', 'store', 'save', 'confirm', 'proceed', 'sure', 'ok', 'done', 'yeah', 'yep', 'ha', 'haan'];
-  const NO  = ['no', 'cancel', 'nope', 'nahi', 'nah', 'stop'];
+  // Stricter YES/NO — match whole words to avoid false triggers
+  // e.g. "ok sounds good" shouldn't accidentally confirm data storage
+  const YES = /\b(yes|store|save|confirm|proceed|sure|yeah|yep|ha|haan|okay)\b/i;
+  const NO  = /\b(no|cancel|nope|nahi|nah|stop)\b/i;
 
   // ── User confirming pending data storage ──────────────────────────────
   if (session.pendingPreview) {
-    if (YES.some(k => lower.includes(k))) {
+    if (YES.test(lower)) {
       await sendMessage(waId, '⏳ Saving your data...');
       try {
         const p = session.pendingPreview;
@@ -166,7 +168,6 @@ async function handleTextMessage(waId, text) {
         const dashUrl    = `${PUBLIC_URL}/dashboard/${session.sessionId}`;
         session.pendingPreview = null;
         session.uploadDone     = true;
-        persistSession(session);
 
         const reply =
           `🎉 All saved!\n\n📊 *Live Dashboard:*\n${dashUrl}\n\n` +
@@ -174,7 +175,9 @@ async function handleTextMessage(waId, text) {
           `🏪 ${stats.inventory} inventory  💳 ${stats.payments} payments\n\n` +
           `Dashboard auto-refreshes every 10s! 🚀`;
 
+        session.history.push({ role: 'user',  parts: [{ text }] });
         session.history.push({ role: 'model', parts: [{ text: reply }] });
+        persistSession(session);
         await sendMessage(waId, reply);
       } catch (err) {
         await sendMessage(waId, `❌ Error saving: ${err.message}`);
@@ -182,17 +185,19 @@ async function handleTextMessage(waId, text) {
       return;
     }
 
-    if (NO.some(k => lower.includes(k))) {
+    if (NO.test(lower)) {
       session.pendingPreview = null;
       const reply = `No problem! 😊 Upload a different file or let me know how I can help.`;
+      session.history.push({ role: 'user',  parts: [{ text }] });
       session.history.push({ role: 'model', parts: [{ text: reply }] });
+      persistSession(session);
       await sendMessage(waId, reply);
       return;
     }
   }
 
   // ── Service activation ────────────────────────────────────────────────
-  if (session.uploadDone && YES.some(k => lower.includes(k))) {
+  if (session.uploadDone && YES.test(lower)) {
     session.confirmed = true;
     await db.confirmSession(session.sessionId).catch(() => {});
   }
@@ -200,19 +205,26 @@ async function handleTextMessage(waId, text) {
   // ── Regular Gemini chat ───────────────────────────────────────────────
   let contextNote = '';
   if (session.uploadDone) {
-    contextNote = `[Context: Data already stored. Dashboard: ${PUBLIC_URL}/dashboard/${session.sessionId}]`;
+    contextNote = `[Context: Data already stored. Dashboard: ${PUBLIC_URL}/dashboard/${session.sessionId}. Do NOT ask them to upload again.]`;
   } else if (session.awaitingUpload) {
-    contextNote = '[Context: Already asked user to send Excel file. Remind them.]';
+    contextNote = '[Context: Already asked user to send Excel file. Gently remind them to attach .xlsx file.]';
+  } else if (session.pendingPreview) {
+    contextNote = '[Context: User sent a file, waiting for Yes/No confirmation to store it.]';
   }
 
   try {
-    const reply = await chat(text, session.history, contextNote);   // ← uses shared llm.js
-    session.history.push({ role: 'user',  parts: [{ text }] });
+    // Push user message to history BEFORE calling Gemini so context is correct
+    session.history.push({ role: 'user', parts: [{ text }] });
+
+    const reply = await chat(text, session.history.slice(0, -1), contextNote); // pass history without last user msg (chat() appends it)
     session.history.push({ role: 'model', parts: [{ text: reply }] });
 
-    if (/upload|excel|xlsx|file|attach|spreadsheet|send/i.test(reply)) {
+    if (/upload|excel|xlsx|file|attach|spreadsheet/i.test(reply)) {
       session.awaitingUpload = true;
     }
+
+    // Always persist after every exchange so history survives server restarts
+    persistSession(session);
     await sendMessage(waId, reply);
   } catch (err) {
     console.error('Meta LLM error:', err.message);
