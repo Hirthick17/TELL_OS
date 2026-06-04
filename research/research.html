@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Research Analysis — WhatsApp Commerce OS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #080b12;
+      --surface:   #0e1320;
+      --card:      #131928;
+      --border:    rgba(255,255,255,0.07);
+      --accent:    #6c63ff;
+      --accent2:   #00d4aa;
+      --accent3:   #ff6b6b;
+      --accent4:   #f5a623;
+      --text:      #e8ecf4;
+      --muted:     #8892a4;
+      --glow:      rgba(108,99,255,0.35);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ─── SCROLLBAR ─────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 3px; }
+
+    /* ─── NAV ────────────────────────────────────── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(8,11,18,0.85);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      display: flex; align-items: center; justify-content: space-between;
+      height: 60px;
+    }
+    .nav-logo {
+      font-weight: 800; font-size: 0.95rem; letter-spacing: -0.02em;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .nav-links { display: flex; gap: 2rem; }
+    .nav-links a {
+      color: var(--muted); text-decoration: none; font-size: 0.82rem;
+      font-weight: 500; letter-spacing: 0.02em; text-transform: uppercase;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+
+    /* ─── HERO ────────────────────────────────────── */
+    .hero {
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 6rem 2rem 4rem;
+      position: relative; overflow: hidden;
+    }
+    .hero-grid {
+      position: absolute; inset: 0;
+      background-image:
+        linear-gradient(rgba(108,99,255,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(108,99,255,0.04) 1px, transparent 1px);
+      background-size: 60px 60px;
+      animation: gridDrift 20s linear infinite;
+    }
+    @keyframes gridDrift { from { transform: translateY(0); } to { transform: translateY(60px); } }
+
+    .hero-orb {
+      position: absolute; border-radius: 50%; filter: blur(80px); pointer-events: none;
+    }
+    .orb1 { width: 500px; height: 500px; background: radial-gradient(circle, rgba(108,99,255,0.25), transparent 70%); top: 10%; left: -10%; animation: float1 8s ease-in-out infinite; }
+    .orb2 { width: 400px; height: 400px; background: radial-gradient(circle, rgba(0,212,170,0.2), transparent 70%); bottom: 10%; right: -5%; animation: float2 10s ease-in-out infinite; }
+    @keyframes float1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(30px,20px)} }
+    @keyframes float2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-20px,30px)} }
+
+    .hero-tag {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(108,99,255,0.12); border: 1px solid rgba(108,99,255,0.3);
+      border-radius: 100px; padding: 6px 16px; font-size: 0.75rem;
+      color: #a89dff; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+      margin-bottom: 2rem; position: relative;
+    }
+    .hero-tag::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent2); animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.3)} }
+
+    .hero h1 {
+      font-size: clamp(2.5rem, 6vw, 4.5rem);
+      font-weight: 900; letter-spacing: -0.04em;
+      line-height: 1.05; max-width: 900px; position: relative;
+    }
+    .hero h1 span {
+      background: linear-gradient(135deg, var(--accent), var(--accent2) 50%, #a78bfa);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .hero p {
+      font-size: 1.1rem; color: var(--muted); max-width: 680px;
+      margin: 1.5rem auto 0; line-height: 1.7; position: relative;
+    }
+    .hero-stats {
+      display: flex; gap: 3rem; margin-top: 3.5rem; position: relative;
+      flex-wrap: wrap; justify-content: center;
+    }
+    .hero-stat { text-align: center; }
+    .hero-stat .num {
+      font-size: 2rem; font-weight: 900; letter-spacing: -0.04em;
+      background: linear-gradient(135deg, var(--accent2), var(--accent));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .hero-stat .label { font-size: 0.75rem; color: var(--muted); font-weight: 500; margin-top: 4px; }
+
+    /* ─── SECTION ─────────────────────────────────── */
+    section { padding: 6rem 2rem; max-width: 1300px; margin: 0 auto; }
+    .section-label {
+      display: inline-block; font-size: 0.7rem; font-weight: 700;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 1rem;
+      background: rgba(108,99,255,0.1); padding: 4px 12px; border-radius: 4px;
+    }
+    .section-title {
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      font-weight: 800; letter-spacing: -0.03em; line-height: 1.1;
+      margin-bottom: 1rem;
+    }
+    .section-sub { font-size: 1rem; color: var(--muted); max-width: 600px; line-height: 1.7; }
+
+    /* ─── DIVIDER ─────────────────────────────────── */
+    .divider { border: none; border-top: 1px solid var(--border); margin: 0; }
+
+    /* ─── PROBLEM MATRIX ─────────────────────────── */
+    .problem-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 1.5px; background: var(--border); border-radius: 16px; overflow: hidden;
+      margin-top: 3rem;
+    }
+    .problem-card {
+      background: var(--card);
+      padding: 2rem;
+      position: relative; overflow: hidden;
+      transition: background 0.3s;
+    }
+    .problem-card:hover { background: #192033; }
+    .problem-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    }
+    .problem-card.critical::before { background: linear-gradient(90deg, var(--accent3), #ff9a3c); }
+    .problem-card.high::before { background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+    .problem-card.medium::before { background: linear-gradient(90deg, var(--accent4), #f5e623); }
+
+    .problem-rank {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem; color: var(--muted); margin-bottom: 1rem;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .problem-badge {
+      font-size: 0.65rem; font-weight: 700; padding: 3px 10px; border-radius: 100px;
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .badge-critical { background: rgba(255,107,107,0.15); color: #ff6b6b; border: 1px solid rgba(255,107,107,0.3); }
+    .badge-high     { background: rgba(108,99,255,0.15); color: #a89dff; border: 1px solid rgba(108,99,255,0.3); }
+    .badge-medium   { background: rgba(245,166,35,0.15); color: #f5a623; border: 1px solid rgba(245,166,35,0.3); }
+
+    .problem-title {
+      font-size: 1.05rem; font-weight: 700; margin-bottom: 0.75rem; letter-spacing: -0.01em;
+    }
+    .problem-desc { font-size: 0.875rem; color: var(--muted); line-height: 1.6; }
+
+    .problem-metrics {
+      display: flex; gap: 1.5rem; margin-top: 1.5rem; flex-wrap: wrap;
+    }
+    .metric { text-align: left; }
+    .metric .val { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.03em; }
+    .metric .lbl { font-size: 0.7rem; color: var(--muted); font-weight: 500; }
+    .metric .val.green { color: var(--accent2); }
+    .metric .val.purple { color: #a89dff; }
+    .metric .val.red { color: var(--accent3); }
+    .metric .val.orange { color: var(--accent4); }
+
+    .problem-quote {
+      background: rgba(108,99,255,0.06); border-left: 3px solid var(--accent);
+      border-radius: 0 8px 8px 0; padding: 0.875rem 1rem; margin-top: 1.25rem;
+      font-size: 0.8rem; color: #c4c9d8; font-style: italic; line-height: 1.6;
+    }
+
+    .impact-bar-wrap { margin-top: 1.25rem; }
+    .impact-bar-label { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--muted); margin-bottom: 6px; }
+    .impact-bar { height: 6px; background: rgba(255,255,255,0.07); border-radius: 3px; overflow: hidden; }
+    .impact-fill { height: 100%; border-radius: 3px; transition: width 1.5s cubic-bezier(0.4,0,0.2,1); width: 0; }
+    .fill-critical { background: linear-gradient(90deg, var(--accent3), #ff9a3c); }
+    .fill-high     { background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+    .fill-medium   { background: linear-gradient(90deg, var(--accent4), #f5e623); }
+
+    /* ─── COMPETITOR TABLE ───────────────────────── */
+    .comp-wrap { overflow-x: auto; margin-top: 3rem; border-radius: 16px; border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; min-width: 900px; }
+    thead tr { background: rgba(108,99,255,0.08); }
+    th {
+      text-align: left; padding: 1rem 1.25rem;
+      font-size: 0.72rem; font-weight: 700; color: var(--muted);
+      letter-spacing: 0.08em; text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 0.875rem 1.25rem;
+      font-size: 0.83rem; color: var(--text);
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .ai-tag {
+      display: inline-block; padding: 2px 8px; border-radius: 100px;
+      font-size: 0.65rem; font-weight: 700;
+    }
+    .ai-no       { background: rgba(255,107,107,0.12); color: #ff6b6b; border: 1px solid rgba(255,107,107,0.2); }
+    .ai-partial  { background: rgba(245,166,35,0.12); color: #f5a623; border: 1px solid rgba(245,166,35,0.2); }
+    .ai-yes      { background: rgba(0,212,170,0.12); color: var(--accent2); border: 1px solid rgba(0,212,170,0.2); }
+
+    .gap-pill {
+      display: inline-block; background: rgba(108,99,255,0.1);
+      color: #a89dff; border: 1px solid rgba(108,99,255,0.2);
+      border-radius: 100px; padding: 2px 10px; font-size: 0.7rem; font-weight: 600;
+      margin: 2px;
+    }
+
+    /* ─── DIFFERENTIATOR CARDS ───────────────────── */
+    .diff-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 3rem; }
+    .diff-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+      padding: 1.75rem; position: relative; overflow: hidden;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+    .diff-card:hover { border-color: rgba(108,99,255,0.4); transform: translateY(-3px); }
+    .diff-card .icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.3rem; margin-bottom: 1rem;
+    }
+    .diff-card h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .diff-card p { font-size: 0.82rem; color: var(--muted); line-height: 1.6; }
+    .diff-card .vs {
+      display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap;
+    }
+    .vs-them { background: rgba(255,107,107,0.08); border: 1px solid rgba(255,107,107,0.2); color: #ff8a8a; font-size: 0.7rem; padding: 3px 10px; border-radius: 6px; }
+    .vs-us   { background: rgba(0,212,170,0.08); border: 1px solid rgba(0,212,170,0.2); color: var(--accent2); font-size: 0.7rem; padding: 3px 10px; border-radius: 6px; }
+
+    /* ─── PSYCHOLOGY ──────────────────────────────── */
+    .psych-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-top: 3rem; }
+    .psych-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 20px; padding: 2rem; position: relative; overflow: hidden;
+    }
+    .psych-card::after {
+      content: ''; position: absolute; bottom: -40px; right: -40px;
+      width: 120px; height: 120px; border-radius: 50%;
+      opacity: 0.06; background: var(--accent);
+    }
+    .psych-number {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 4rem; font-weight: 900; line-height: 1;
+      color: rgba(108,99,255,0.1); margin-bottom: -0.5rem;
+    }
+    .psych-title { font-size: 1.1rem; font-weight: 800; margin-bottom: 0.75rem; letter-spacing: -0.02em; }
+    .psych-trigger {
+      display: inline-block; font-size: 0.7rem; font-weight: 700;
+      background: rgba(245,166,35,0.1); color: var(--accent4);
+      border: 1px solid rgba(245,166,35,0.2); border-radius: 6px; padding: 3px 10px;
+      margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .psych-body { font-size: 0.855rem; color: var(--muted); line-height: 1.7; }
+    .psych-hook {
+      margin-top: 1.25rem; padding: 1rem; border-radius: 10px;
+      background: rgba(0,212,170,0.06); border: 1px solid rgba(0,212,170,0.15);
+      font-size: 0.8rem; color: var(--accent2); font-weight: 600; line-height: 1.5;
+    }
+    .psych-hook span { color: var(--muted); font-weight: 400; }
+
+    /* ─── OPPORTUNITY MATRIX ─────────────────────── */
+    .matrix-wrap { margin-top: 3rem; }
+    .matrix-row { display: flex; align-items: center; gap: 1.5rem; padding: 1.25rem 0; border-bottom: 1px solid var(--border); }
+    .matrix-row:last-child { border-bottom: none; }
+    .matrix-rank {
+      font-family: 'JetBrains Mono', monospace; font-size: 1.5rem; font-weight: 900;
+      color: rgba(255,255,255,0.08); min-width: 40px;
+    }
+    .matrix-info { flex: 1; }
+    .matrix-info h4 { font-size: 0.92rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .matrix-info p { font-size: 0.8rem; color: var(--muted); }
+    .matrix-scores { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .score-box { text-align: center; min-width: 65px; }
+    .score-box .s { font-size: 1.3rem; font-weight: 800; letter-spacing: -0.03em; }
+    .score-box .l { font-size: 0.62rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .score-total { font-size: 1.6rem; font-weight: 900; color: var(--accent2); min-width: 50px; text-align: center; }
+
+    /* ─── QUOTE CAROUSEL ──────────────────────────── */
+    .quotes-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-top: 3rem; }
+    .quote-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+      padding: 1.5rem; position: relative;
+    }
+    .quote-card::before {
+      content: '"'; position: absolute; top: -10px; left: 1.5rem;
+      font-size: 5rem; line-height: 1; color: var(--accent); opacity: 0.15;
+      font-family: Georgia, serif;
+    }
+    .quote-text { font-size: 0.875rem; color: var(--text); line-height: 1.7; font-style: italic; margin-bottom: 1rem; position: relative; z-index: 1; }
+    .quote-author { font-size: 0.72rem; color: var(--accent2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+    .quote-pain { margin-top: 0.75rem; }
+    .pain-tag { display: inline-block; background: rgba(255,107,107,0.08); color: #ff8a8a; border: 1px solid rgba(255,107,107,0.15); border-radius: 100px; font-size: 0.65rem; padding: 2px 9px; font-weight: 600; margin: 2px; }
+
+    /* ─── FOOTER ──────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      text-align: center; padding: 3rem 2rem;
+      color: var(--muted); font-size: 0.8rem;
+    }
+    footer strong { color: var(--text); }
+
+    /* ─── FADE IN ─────────────────────────────────── */
+    .fade-in {
+      opacity: 0; transform: translateY(24px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+    .fade-in.visible { opacity: 1; transform: translateY(0); }
+
+    /* ─── RESPONSIVE ──────────────────────────────── */
+    @media (max-width: 640px) {
+      nav .nav-links { display: none; }
+      .hero h1 { font-size: 2rem; }
+      .hero-stats { gap: 1.5rem; }
+      section { padding: 4rem 1.25rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">⚡ WhatsApp Commerce OS — Research</div>
+  <div class="nav-links">
+    <a href="#problems">Problems</a>
+    <a href="#competitors">Competitors</a>
+    <a href="#differentiators">Differentiators</a>
+    <a href="#psychology">Psychology</a>
+    <a href="#opportunity">Opportunity</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-orb orb1"></div>
+  <div class="hero-orb orb2"></div>
+  <div class="hero-tag">4-Track Research Analysis · 170 Entries</div>
+  <h1>The <span>Highest Impact</span> Problems<br/>Worth Solving</h1>
+  <p>Synthesised from 50 target customers, 30 competitors, 50 builders, and 40 interview templates — mapped against real merchant pain, competitor gaps, and human psychology.</p>
+  <div class="hero-stats">
+    <div class="hero-stat"><div class="num">₹1.1L Cr</div><div class="label">Market Size 2024</div></div>
+    <div class="hero-stat"><div class="num">95%</div><div class="label">MSMEs on Manual Methods</div></div>
+    <div class="hero-stat"><div class="num">6</div><div class="label">Tools the Avg. Merchant Juggles</div></div>
+    <div class="hero-stat"><div class="num">0</div><div class="label">Tools That Unify the Layer</div></div>
+  </div>
+</div>
+
+<hr class="divider" />
+
+<!-- SECTION 1: PROBLEMS -->
+<section id="problems">
+  <div class="fade-in">
+    <div class="section-label">Track 1 + 4 — Problem Analysis</div>
+    <h2 class="section-title">High-Impact Problems<br/>Worth Solving First</h2>
+    <p class="section-sub">Ranked by frequency across merchant complaints, interview data, and segment pain point overlap. Impact score = (frequency × revenue loss × solvability).</p>
+  </div>
+
+  <div class="problem-grid fade-in">
+
+    <!-- P1 -->
+    <div class="problem-card critical">
+      <div class="problem-rank">
+        PROBLEM #01
+        <span class="problem-badge badge-critical">🔥 Critical</span>
+      </div>
+      <div class="problem-title">Order Visibility Chaos</div>
+      <div class="problem-desc">Merchants manage orders across WhatsApp labels, Instagram DMs, phone notes, and colour-coded chats. No single source of truth. At 20+ orders/day, the system breaks completely.</div>
+      <div class="impact-bar-wrap">
+        <div class="impact-bar-label"><span>Impact Score</span><span>96/100</span></div>
+        <div class="impact-bar"><div class="impact-fill fill-critical" data-width="96"></div></div>
+      </div>
+      <div class="problem-metrics">
+        <div class="metric"><div class="val red">80%</div><div class="lbl">Support queries = WISMO</div></div>
+        <div class="metric"><div class="val orange">53%</div><div class="lbl">Expect WA tracking</div></div>
+        <div class="metric"><div class="val green">3 ppl</div><div class="lbl">Avg. manually replying</div></div>
+      </div>
+      <div class="problem-quote">"I track orders in colour-coded WhatsApp labels — New Inquiry, Order Pending, Payment Awaited. It breaks the moment volume goes up."</div>
+    </div>
+
+    <!-- P2 -->
+    <div class="problem-card critical">
+      <div class="problem-rank">
+        PROBLEM #02
+        <span class="problem-badge badge-critical">🔥 Critical</span>
+      </div>
+      <div class="problem-title">Inventory Blindness</div>
+      <div class="problem-desc">Sellers promise availability they don't have. No real-time stock sync across Instagram catalogue, WhatsApp messages, and the physical shelf. Results in cancellations and customer trust erosion.</div>
+      <div class="impact-bar-wrap">
+        <div class="impact-bar-label"><span>Impact Score</span><span>91/100</span></div>
+        <div class="impact-bar"><div class="impact-fill fill-critical" data-width="91"></div></div>
+      </div>
+      <div class="problem-metrics">
+        <div class="metric"><div class="val red">95%</div><div class="lbl">MSMEs on manual methods</div></div>
+        <div class="metric"><div class="val orange">Full-time</div><div class="lbl">Catalogue upkeep cost</div></div>
+      </div>
+      <div class="problem-quote">"Catalogue management is time-consuming — updating availability across channels is a full-time job."</div>
+    </div>
+
+    <!-- P3 -->
+    <div class="problem-card critical">
+      <div class="problem-rank">
+        PROBLEM #03
+        <span class="problem-badge badge-critical">🔥 Critical</span>
+      </div>
+      <div class="problem-title">Tool Fragmentation (6-Tool Stack)</div>
+      <div class="problem-desc">Average SMB seller uses Shopify + Interakt + Shiprocket + Excel + Google Sheets + Notion simultaneously. Context switching between tools is the #1 hidden time cost — estimated 2–3 hours per day.</div>
+      <div class="impact-bar-wrap">
+        <div class="impact-bar-label"><span>Impact Score</span><span>89/100</span></div>
+        <div class="impact-bar"><div class="impact-fill fill-critical" data-width="89"></div></div>
+      </div>
+      <div class="problem-metrics">
+        <div class="metric"><div class="val red">6</div><div class="lbl">Avg. tools used</div></div>
+        <div class="metric"><div class="val orange">₹9K+</div><div class="lbl">Monthly tool spend</div></div>
+        <div class="metric"><div class="val green">2–3h</div><div class="lbl">Lost daily to switching</div></div>
+      </div>
+      <div class="problem-quote">"We use 6 tools — Shopify, Interakt, Shiprocket, Excel, Google Sheets, Notion. Customer support takes 3 people manually replying all day."</div>
+    </div>
+
+    <!-- P4 -->
+    <div class="problem-card high">
+      <div class="problem-rank">
+        PROBLEM #04
+        <span class="problem-badge badge-high">⚡ High</span>
+      </div>
+      <div class="problem-title">Revenue Leakage from Abandoned Carts</div>
+      <div class="problem-desc">WhatsApp follow-ups for incomplete orders are inconsistent and manual. Sellers know they're losing 20–40% of intent but have no automated way to recover it. The pain is daily and measurable.</div>
+      <div class="impact-bar-wrap">
+        <div class="impact-bar-label"><span>Impact Score</span><span>85/100</span></div>
+        <div class="impact-bar"><div class="impact-fill fill-high" data-width="85"></div></div>
+      </div>
+      <div class="problem-metrics">
+        <div class="metric"><div class="val purple">60%</div><div class="lbl">WA open rate (vs 20% email)</div></div>
+        <div class="metric"><div class="val orange">Daily</div><div class="lbl">Revenue missed</div></div>
+      </div>
+      <div class="problem-quote">"Abandoned cart follow-up is manual and inconsistent — we miss revenue every day."</div>
+    </div>
+
+    <!-- P5 -->
+    <div class="problem-card high">
+      <div class="problem-rank">
+        PROBLEM #05
+        <span class="problem-badge badge-high">⚡ High</span>
+      </div>
+      <div class="problem-title">Zero Business Intelligence</div>
+      <div class="problem-desc">Most SMB sellers have no daily visibility into revenue, top sellers, or stock warnings. They make decisions by feel, not data. There's no dashboard they actually look at every morning.</div>
+      <div class="impact-bar-wrap">
+        <div class="impact-bar-label"><span>Impact Score</span><span>82/100</span></div>
+        <div class="impact-bar"><div class="impact-fill fill-high" data-width="82"></div></div>
+      </div>
+      <div class="problem-metrics">
+        <div class="metric"><div class="val purple">0</div><div class="lbl">Tools sending daily WA summary</div></div>
+        <div class="metric"><div class="val green">9am</div><div class="lbl">Habit formation window</div></div>
+      </div>
+      <div class="problem-quote">"I know something is wrong only when customers complain. By then it's already too late to fix."</div>
+    </div>
+
+    <!-- P6 -->
+    <div class="problem-card medium">
+      <div class="problem-rank">
+        PROBLEM #06
+        <span class="problem-badge badge-medium">📊 Medium</span>
+      </div>
+      <div class="problem-title">WhatsApp Segmentation Gap</div>
+      <div class="problem-desc">Sellers know WhatsApp campaigns work (60% open rate) but have no way to segment their contact list by purchase history, category preference, or recency. Broadcast to everyone = spam to most.</div>
+      <div class="impact-bar-wrap">
+        <div class="impact-bar-label"><span>Impact Score</span><span>71/100</span></div>
+        <div class="impact-bar"><div class="impact-fill fill-medium" data-width="71"></div></div>
+      </div>
+      <div class="problem-metrics">
+        <div class="metric"><div class="val purple">98%</div><div class="lbl">WA open rate</div></div>
+        <div class="metric"><div class="val orange">0</div><div class="lbl">Tools segment properly at ₹0</div></div>
+      </div>
+      <div class="problem-quote">"WhatsApp campaigns get 60% open rate but we have no way to segment properly."</div>
+    </div>
+
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- SECTION 2: COMPETITORS -->
+<section id="competitors">
+  <div class="fade-in">
+    <div class="section-label">Track 2 — Competitor Analysis</div>
+    <h2 class="section-title">What Competitors Automate<br/>vs What They Don't</h2>
+    <p class="section-sub">30 tools analysed. Every competitor solves one slice. Nobody owns the operating layer. The gap is the opportunity.</p>
+  </div>
+
+  <div class="comp-wrap fade-in">
+    <table>
+      <thead>
+        <tr>
+          <th>Tool</th>
+          <th>Pricing</th>
+          <th>Automates</th>
+          <th>Critical Gap</th>
+          <th>AI Useful?</th>
+          <th>Our Wedge</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Interakt</strong></td>
+          <td>₹2,142/mo</td>
+          <td>Order notifications, basic CRM</td>
+          <td><span class="gap-pill">No inventory sync</span><span class="gap-pill">Complex orders</span></td>
+          <td><span class="ai-tag ai-partial">Partial</span></td>
+          <td>Price + AI depth</td>
+        </tr>
+        <tr>
+          <td><strong>WATI</strong></td>
+          <td>₹2,499/mo</td>
+          <td>Message templates, basic flows</td>
+          <td><span class="gap-pill">No inventory</span><span class="gap-pill">No order mgmt</span></td>
+          <td><span class="ai-tag ai-partial">Partial</span></td>
+          <td>Simpler + cheaper</td>
+        </tr>
+        <tr>
+          <td><strong>AiSensy</strong></td>
+          <td>₹999/mo</td>
+          <td>Marketing campaigns, chatbots</td>
+          <td><span class="gap-pill">No real AI agents</span><span class="gap-pill">No commerce ops</span></td>
+          <td><span class="ai-tag ai-no">Limited</span></td>
+          <td>Actual tool-calling AI</td>
+        </tr>
+        <tr>
+          <td><strong>Dukaan</strong></td>
+          <td>Free + fees</td>
+          <td>WhatsApp catalog sharing</td>
+          <td><span class="gap-pill">No inventory mgmt</span><span class="gap-pill">No AI</span></td>
+          <td><span class="ai-tag ai-no">No</span></td>
+          <td>Full ops layer</td>
+        </tr>
+        <tr>
+          <td><strong>Bikayi</strong></td>
+          <td>Free + fees</td>
+          <td>Store builder</td>
+          <td><span class="gap-pill">No automation</span><span class="gap-pill">No multi-channel</span></td>
+          <td><span class="ai-tag ai-no">No</span></td>
+          <td>AI-first operations</td>
+        </tr>
+        <tr>
+          <td><strong>Shiprocket</strong></td>
+          <td>Variable</td>
+          <td>Shipping, order tracking</td>
+          <td><span class="gap-pill">Shipping only</span><span class="gap-pill">No full commerce</span></td>
+          <td><span class="ai-tag ai-partial">Partial</span></td>
+          <td>Beyond shipping</td>
+        </tr>
+        <tr>
+          <td><strong>KhataBook</strong></td>
+          <td>Free–₹5K/yr</td>
+          <td>Digital ledger, bookkeeping</td>
+          <td><span class="gap-pill">No customer ops</span><span class="gap-pill">No WhatsApp</span></td>
+          <td><span class="ai-tag ai-no">No</span></td>
+          <td>WA-native operations</td>
+        </tr>
+        <tr>
+          <td><strong>Tally</strong></td>
+          <td>₹6K–18K/yr</td>
+          <td>Accounting, inventory counts</td>
+          <td><span class="gap-pill">Not customer-facing</span><span class="gap-pill">No automation</span></td>
+          <td><span class="ai-tag ai-no">No</span></td>
+          <td>Conversational interface</td>
+        </tr>
+        <tr>
+          <td><strong>Gupshup</strong></td>
+          <td>₹4,000+/mo</td>
+          <td>Enterprise WhatsApp API</td>
+          <td><span class="gap-pill">Enterprise only</span><span class="gap-pill">Too expensive</span></td>
+          <td><span class="ai-tag ai-partial">Partial</span></td>
+          <td>SMB pricing + simplicity</td>
+        </tr>
+        <tr>
+          <td><strong>Shopify</strong></td>
+          <td>$29–299/mo</td>
+          <td>Store building, checkout</td>
+          <td><span class="gap-pill">Not WA-native</span><span class="gap-pill">No chat ops</span></td>
+          <td><span class="ai-tag ai-partial">Partial</span></td>
+          <td>WhatsApp-first interface</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- SECTION 3: DIFFERENTIATORS -->
+<section id="differentiators">
+  <div class="fade-in">
+    <div class="section-label">Strategic Analysis</div>
+    <h2 class="section-title">Our Differentiators<br/>Nobody Else Has This</h2>
+    <p class="section-sub">Every competitor is a point solution. We are the operating layer. These are the specific moats that make this defensible, not just different.</p>
+  </div>
+
+  <div class="diff-grid fade-in">
+
+    <div class="diff-card">
+      <div class="icon" style="background:rgba(108,99,255,0.15);">🤖</div>
+      <h3>AI That Executes, Not Just Responds</h3>
+      <p>Every competitor uses AI for marketing copy or keyword chatbots. We use Gemini tool-calling to actually query databases, update inventory, and route actions — natural language becomes system commands.</p>
+      <div class="vs">
+        <span class="vs-them">❌ Competitors: AI writes messages</span>
+        <span class="vs-us">✅ Us: AI runs the business</span>
+      </div>
+    </div>
+
+    <div class="diff-card">
+      <div class="icon" style="background:rgba(0,212,170,0.15);">📱</div>
+      <h3>WhatsApp as the Operating System</h3>
+      <p>Competitors build dashboards and plug WhatsApp in as a channel. We invert that: WhatsApp is the interface. Merchants never need to open another app. Zero onboarding friction — they already know WhatsApp.</p>
+      <div class="vs">
+        <span class="vs-them">❌ Competitors: Dashboard + WA plugin</span>
+        <span class="vs-us">✅ Us: WA is the dashboard</span>
+      </div>
+    </div>
+
+    <div class="diff-card">
+      <div class="icon" style="background:rgba(245,166,35,0.15);">☀️</div>
+      <h3>Daily Summary = Daily Habit Loop</h3>
+      <p>No competitor sends a 9am business briefing to WhatsApp. Once a merchant expects "Yesterday: ₹14,200, 12 orders, 3 low stock" every morning, they are locked in. This feature alone creates the retention moat.</p>
+      <div class="vs">
+        <span class="vs-them">❌ Competitors: Check dashboard manually</span>
+        <span class="vs-us">✅ Us: Intelligence comes to you</span>
+      </div>
+    </div>
+
+    <div class="diff-card">
+      <div class="icon" style="background:rgba(255,107,107,0.15);">🧠</div>
+      <h3>Merchant Context Store (Personalisation Moat)</h3>
+      <p>We store the merchant's business name, product categories, and preferences. The AI knows it's talking to "Priya's Boutique" not a generic user. This context compounds over time — the longer they use it, the smarter it gets.</p>
+      <div class="vs">
+        <span class="vs-them">❌ Competitors: Generic responses</span>
+        <span class="vs-us">✅ Us: Knows your business</span>
+      </div>
+    </div>
+
+    <div class="diff-card">
+      <div class="icon" style="background:rgba(108,99,255,0.15);">⚡</div>
+      <h3>₹0 Until Paying Merchants</h3>
+      <p>Entire stack runs on free tiers: Gemini Flash, Supabase, Railway, Meta Cloud API. Competitors charge ₹999–₹2,499/month upfront. We can offer a completely free entry point and convert at value realisation.</p>
+      <div class="vs">
+        <span class="vs-them">❌ Competitors: ₹999–₹2,499/mo upfront</span>
+        <span class="vs-us">✅ Us: Free until value proven</span>
+      </div>
+    </div>
+
+    <div class="diff-card">
+      <div class="icon" style="background:rgba(0,212,170,0.15);">🔗</div>
+      <h3>Unified Operating Layer (Not a Point Tool)</h3>
+      <p>Interakt handles messaging. Shiprocket handles shipping. Tally handles accounting. We handle the entire merchant workflow inside one conversation thread — orders, inventory, summaries, updates — no switching.</p>
+      <div class="vs">
+        <span class="vs-them">❌ Competitors: One piece of the puzzle</span>
+        <span class="vs-us">✅ Us: Whole operating layer</span>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- SECTION 4: PSYCHOLOGY -->
+<section id="psychology">
+  <div class="fade-in">
+    <div class="section-label">Behavioural Research</div>
+    <h2 class="section-title">The Psychology Behind<br/>These Problems</h2>
+    <p class="section-sub">Why do merchants stick to broken systems? Understanding the human behaviour underneath the pain is what makes product design and positioning land. These are the 7 mental models at play.</p>
+  </div>
+
+  <div class="psych-grid fade-in">
+
+    <div class="psych-card">
+      <div class="psych-number">01</div>
+      <div class="psych-trigger">Cognitive Trigger: Loss Aversion</div>
+      <div class="psych-title">The Fear of Missing a Sale</div>
+      <div class="psych-body">The reason merchants check WhatsApp every 10 minutes isn't excitement — it's fear. Missing an order message means losing a sale. This hyper-vigilance creates compulsive checking behaviour that keeps them trapped in WhatsApp even when it fails them as a system.</div>
+      <div class="psych-hook">🪝 Product Hook: <span>Frame the daily summary and order alerts as "never miss a sale again" — not as automation. Loss prevention resonates 2.5× stronger than efficiency gains.</span></div>
+    </div>
+
+    <div class="psych-card">
+      <div class="psych-number">02</div>
+      <div class="psych-trigger">Cognitive Trigger: Illusion of Control</div>
+      <div class="psych-title">Colour-Coded Labels as False Control</div>
+      <div class="psych-body">Merchants build elaborate label systems ("New Inquiry" → "Payment Awaited" → "Packed") because it feels like a process. It isn't — it's a simulation of control. The system collapses at volume, but the effort invested creates the sunk cost fallacy: "I built this system, it must work."</div>
+      <div class="psych-hook">🪝 Product Hook: <span>Don't call their system broken. Say "you've already built the logic — we just run it automatically so you don't have to remember." Validate first, then replace.</span></div>
+    </div>
+
+    <div class="psych-card">
+      <div class="psych-number">03</div>
+      <div class="psych-trigger">Cognitive Trigger: Tool Fatigue</div>
+      <div class="psych-title">The New Tool Resistance</div>
+      <div class="psych-body">Merchants have already tried 2–3 tools that promised to solve this and didn't. They've paid for platforms they barely used. This creates a strong anti-adoption bias. "Another app" is not a selling proposition — it triggers memory of past failures and switching costs.</div>
+      <div class="psych-hook">🪝 Product Hook: <span>"You don't need another app. Just send a WhatsApp message." The zero-install, familiar-interface approach is the only way past this barrier.</span></div>
+    </div>
+
+    <div class="psych-card">
+      <div class="psych-number">04</div>
+      <div class="psych-trigger">Cognitive Trigger: Status Identity</div>
+      <div class="psych-title">The "Real Business" Aspiration</div>
+      <div class="psych-body">Instagram and WhatsApp sellers often feel like they're not running a "real" business because they don't have systems. They see Shopify brands as more legitimate. This creates hidden aspiration — they want to operate professionally without the complexity of professional tools.</div>
+      <div class="psych-hook">🪝 Product Hook: <span>"Run your business like a pro, from WhatsApp." The status aspiration — professionalism without complexity — is a powerful motivator for this segment.</span></div>
+    </div>
+
+    <div class="psych-card">
+      <div class="psych-number">05</div>
+      <div class="psych-trigger">Cognitive Trigger: Present Bias</div>
+      <div class="psych-title">"I'll Fix It When I Scale"</div>
+      <div class="psych-body">Merchants consistently defer systematisation until some future threshold ("when I hit 50 orders a day, I'll get a proper system"). The irony: the moment they need the system is exactly when they have least time to set it up. Present bias keeps them under-systematised indefinitely.</div>
+      <div class="psych-hook">🪝 Product Hook: <span>Trigger urgency at exactly the moment of pain. If they just said "it breaks when volume goes up" — that's the moment to show how 5 minutes now prevents breakdown at scale.</span></div>
+    </div>
+
+    <div class="psych-card">
+      <div class="psych-number">06</div>
+      <div class="psych-trigger">Cognitive Trigger: Proximity Comfort</div>
+      <div class="psych-title">WhatsApp as Trusted Territory</div>
+      <div class="psych-body">WhatsApp is where Indian merchants live — family, friends, customers, suppliers. It's trusted, familiar, and already habitual. Any new tool faces the fundamental switching problem: it asks them to go somewhere they don't naturally go. WhatsApp doesn't have this problem.</div>
+      <div class="psych-hook">🪝 Product Hook: <span>The product IS WhatsApp — don't frame it as integrating with WhatsApp. The channel is the product. This is the core positioning advantage.</span></div>
+    </div>
+
+    <div class="psych-card">
+      <div class="psych-number">07</div>
+      <div class="psych-trigger">Cognitive Trigger: Memory Overload</div>
+      <div class="psych-title">Memory as Infrastructure</div>
+      <div class="psych-body">Sellers carry a terrifying amount of business state in their heads: which customer ordered what, which item is low, what price they quoted in which conversation. When they describe their process, they use the word "I remember." Memory IS their system — and it's non-transferable, non-scalable, and fragile.</div>
+      <div class="psych-hook">🪝 Product Hook: <span>"Stop remembering. Start asking." Externalise their memory into a queryable system. The relief of offloading cognitive load is deeply emotional — not rational.</span></div>
+    </div>
+
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- SECTION 5: OPPORTUNITY MATRIX -->
+<section id="opportunity">
+  <div class="fade-in">
+    <div class="section-label">Prioritisation Framework</div>
+    <h2 class="section-title">Opportunity Scoring Matrix</h2>
+    <p class="section-sub">Each problem scored across 4 dimensions: Frequency (how often), Revenue Impact (how much $), Competitor Gap (how underserved), and Solvability (how quickly we ship). Score out of 40.</p>
+  </div>
+
+  <div class="matrix-wrap fade-in">
+
+    <div class="matrix-row">
+      <div class="matrix-rank">01</div>
+      <div class="matrix-info">
+        <h4>Order Visibility via Chat</h4>
+        <p>Merchant types "show pending orders" → AI returns structured list. Covers 80% of support load.</p>
+      </div>
+      <div class="matrix-scores">
+        <div class="score-box"><div class="s" style="color:#ff6b6b">10</div><div class="l">Frequency</div></div>
+        <div class="score-box"><div class="s" style="color:#f5a623">9</div><div class="l">Revenue</div></div>
+        <div class="score-box"><div class="s" style="color:#a89dff">10</div><div class="l">Gap</div></div>
+        <div class="score-box"><div class="s" style="color:#00d4aa">9</div><div class="l">Solvability</div></div>
+      </div>
+      <div class="score-total">38</div>
+    </div>
+
+    <div class="matrix-row">
+      <div class="matrix-rank">02</div>
+      <div class="matrix-info">
+        <h4>Inventory Check + Low Stock Alerts</h4>
+        <p>"How many black hoodies left?" + proactive alerts below threshold.</p>
+      </div>
+      <div class="matrix-scores">
+        <div class="score-box"><div class="s" style="color:#ff6b6b">9</div><div class="l">Frequency</div></div>
+        <div class="score-box"><div class="s" style="color:#f5a623">9</div><div class="l">Revenue</div></div>
+        <div class="score-box"><div class="s" style="color:#a89dff">10</div><div class="l">Gap</div></div>
+        <div class="score-box"><div class="s" style="color:#00d4aa">9</div><div class="l">Solvability</div></div>
+      </div>
+      <div class="score-total">37</div>
+    </div>
+
+    <div class="matrix-row">
+      <div class="matrix-rank">03</div>
+      <div class="matrix-info">
+        <h4>Daily Business Summary at 9am</h4>
+        <p>"Yesterday — ₹14,200 revenue, 12 orders, top seller: Blue Kurta, 3 items low on stock."</p>
+      </div>
+      <div class="matrix-scores">
+        <div class="score-box"><div class="s" style="color:#ff6b6b">8</div><div class="l">Frequency</div></div>
+        <div class="score-box"><div class="s" style="color:#f5a623">8</div><div class="l">Revenue</div></div>
+        <div class="score-box"><div class="s" style="color:#a89dff">10</div><div class="l">Gap</div></div>
+        <div class="score-box"><div class="s" style="color:#00d4aa">10</div><div class="l">Solvability</div></div>
+      </div>
+      <div class="score-total">36</div>
+    </div>
+
+    <div class="matrix-row">
+      <div class="matrix-rank">04</div>
+      <div class="matrix-info">
+        <h4>Add/Update Product via Chat</h4>
+        <p>"Add 50 units of red kurta ₹799" → inventory updates instantly. No dashboard needed.</p>
+      </div>
+      <div class="matrix-scores">
+        <div class="score-box"><div class="s" style="color:#ff6b6b">7</div><div class="l">Frequency</div></div>
+        <div class="score-box"><div class="s" style="color:#f5a623">8</div><div class="l">Revenue</div></div>
+        <div class="score-box"><div class="s" style="color:#a89dff">10</div><div class="l">Gap</div></div>
+        <div class="score-box"><div class="s" style="color:#00d4aa">9</div><div class="l">Solvability</div></div>
+      </div>
+      <div class="score-total">34</div>
+    </div>
+
+    <div class="matrix-row">
+      <div class="matrix-rank">05</div>
+      <div class="matrix-info">
+        <h4>Abandoned Cart Recovery (WhatsApp)</h4>
+        <p>Auto-follow-up on incomplete orders. High open rate, consistent execution.</p>
+      </div>
+      <div class="matrix-scores">
+        <div class="score-box"><div class="s" style="color:#ff6b6b">8</div><div class="l">Frequency</div></div>
+        <div class="score-box"><div class="s" style="color:#f5a623">9</div><div class="l">Revenue</div></div>
+        <div class="score-box"><div class="s" style="color:#a89dff">7</div><div class="l">Gap</div></div>
+        <div class="score-box"><div class="s" style="color:#00d4aa">6</div><div class="l">Solvability</div></div>
+      </div>
+      <div class="score-total">30</div>
+    </div>
+
+    <div class="matrix-row">
+      <div class="matrix-rank">06</div>
+      <div class="matrix-info">
+        <h4>Customer Segmentation for WA Campaigns</h4>
+        <p>Segment by purchase history → targeted broadcast. Phase 2 territory.</p>
+      </div>
+      <div class="matrix-scores">
+        <div class="score-box"><div class="s" style="color:#ff6b6b">6</div><div class="l">Frequency</div></div>
+        <div class="score-box"><div class="s" style="color:#f5a623">8</div><div class="l">Revenue</div></div>
+        <div class="score-box"><div class="s" style="color:#a89dff">7</div><div class="l">Gap</div></div>
+        <div class="score-box"><div class="s" style="color:#00d4aa">5</div><div class="l">Solvability</div></div>
+      </div>
+      <div class="score-total">26</div>
+    </div>
+
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- SECTION 6: REAL QUOTES -->
+<section>
+  <div class="fade-in">
+    <div class="section-label">Voice of Customer</div>
+    <h2 class="section-title">Real Merchant Quotes<br/>Annotated for Signal</h2>
+    <p class="section-sub">These aren't feature requests. They are pain confessions. Each quote maps to a problem, a psychological trigger, and a product hook.</p>
+  </div>
+
+  <div class="quotes-grid fade-in">
+
+    <div class="quote-card">
+      <div class="quote-text">"We use 6 tools — Shopify, Interakt, Shiprocket, Excel, Google Sheets, Notion. Customer support takes 3 people manually replying all day."</div>
+      <div class="quote-author">D2C Brand Founder, India</div>
+      <div class="quote-pain">
+        <span class="pain-tag">Tool Fragmentation</span>
+        <span class="pain-tag">Labour Cost</span>
+        <span class="pain-tag">Scale Ceiling</span>
+      </div>
+    </div>
+
+    <div class="quote-card">
+      <div class="quote-text">"Abandoned cart follow-up is manual and inconsistent — we miss revenue every day."</div>
+      <div class="quote-author">Instagram Seller, Fashion</div>
+      <div class="quote-pain">
+        <span class="pain-tag">Revenue Leakage</span>
+        <span class="pain-tag">Manual Ops</span>
+        <span class="pain-tag">Daily Recurring</span>
+      </div>
+    </div>
+
+    <div class="quote-card">
+      <div class="quote-text">"WhatsApp campaigns get 60% open rate but we have no way to segment properly."</div>
+      <div class="quote-author">D2C Brand, Beauty</div>
+      <div class="quote-pain">
+        <span class="pain-tag">No Segmentation</span>
+        <span class="pain-tag">Wasted Reach</span>
+        <span class="pain-tag">Broadcast = Spam</span>
+      </div>
+    </div>
+
+    <div class="quote-card">
+      <div class="quote-text">"I track orders in colour-coded WhatsApp labels — New Inquiry, Order Pending, Payment Awaited, Order Completed. It breaks the moment volume goes up."</div>
+      <div class="quote-author">WhatsApp Boutique Seller</div>
+      <div class="quote-pain">
+        <span class="pain-tag">False System</span>
+        <span class="pain-tag">Scale Failure</span>
+        <span class="pain-tag">Illusion of Control</span>
+      </div>
+    </div>
+
+    <div class="quote-card">
+      <div class="quote-text">"Catalogue management is time-consuming — updating availability across channels is a full-time job."</div>
+      <div class="quote-author">Jewellery Seller, Chennai</div>
+      <div class="quote-pain">
+        <span class="pain-tag">Inventory Blindness</span>
+        <span class="pain-tag">Channel Sync</span>
+        <span class="pain-tag">Time Drain</span>
+      </div>
+    </div>
+
+    <div class="quote-card">
+      <div class="quote-text">"80% of support queries are just 'where is my order?' — no automation handles this end to end."</div>
+      <div class="quote-author">D2C Merchant, Fashion</div>
+      <div class="quote-pain">
+        <span class="pain-tag">WISMO Overload</span>
+        <span class="pain-tag">Support Cost</span>
+        <span class="pain-tag">Automation Gap</span>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- FOOTER -->
+<footer>
+  <p>Research synthesised from <strong>170 data points</strong> across 4 tracks — Target Customers, Competitors, Builders, and Interview Templates.</p>
+  <p style="margin-top:0.5rem;">Built for the <strong>WhatsApp Commerce OS</strong> hackathon. Phase 1 MVP: 4 features. Zero cost stack. Ship before perfecting.</p>
+</footer>
+
+<script>
+  // ── Intersection Observer for fade-in ────────────────────────
+  const fadeEls = document.querySelectorAll('.fade-in');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        // trigger impact bars
+        const bars = entry.target.querySelectorAll('.impact-fill');
+        bars.forEach(bar => {
+          const w = bar.getAttribute('data-width');
+          setTimeout(() => { bar.style.width = w + '%'; }, 200);
+        });
+      }
+    });
+  }, { threshold: 0.08 });
+
+  fadeEls.forEach(el => observer.observe(el));
+
+  // Also trigger bars that are already visible on load
+  document.querySelectorAll('.impact-fill').forEach(bar => {
+    const w = bar.getAttribute('data-width');
+    if (w) bar.style.width = '0%';
+  });
+
+  // ── Stagger child cards ───────────────────────────────────────
+  document.querySelectorAll('.problem-grid, .diff-grid, .psych-grid, .quotes-grid').forEach(grid => {
+    const cards = grid.children;
+    Array.from(cards).forEach((card, i) => {
+      card.style.transitionDelay = `${i * 0.08}s`;
+    });
+  });
+
+  // ── Number counter animation ──────────────────────────────────
+  function animateCounter(el, target, suffix = '') {
+    let start = 0;
+    const duration = 1500;
+    const step = (timestamp) => {
+      if (!start) start = timestamp;
+      const progress = Math.min((timestamp - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      el.textContent = Math.floor(eased * target) + suffix;
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  // ── Smooth active nav link highlighting ──────────────────────
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('.nav-links a');
+
+  window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(sec => {
+      const top = sec.offsetTop - 120;
+      if (window.scrollY >= top) current = sec.getAttribute('id');
+    });
+    navLinks.forEach(link => {
+      link.style.color = link.getAttribute('href') === '#' + current ? 'var(--text)' : '';
+    });
+  });
+</script>
+</body>
+</html>

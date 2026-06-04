@@ -1,0 +1,51 @@
+Segment,Segment_Name,Type,Example,Pain_Points,Potential_Value,Bucket
+A,Instagram+WhatsApp Sellers,Clothing stores,Clothing boutiques on Instagram/WhatsApp,"Order tracking in chats, Inventory confusion, Customer follow-ups, Manual marketing",Very High,Instagram WhatsApp Sellers
+A,Instagram+WhatsApp Sellers,Jewelry sellers,Jewelry artisans on WhatsApp,"Order tracking in chats, Inventory confusion, Customer follow-ups, Manual marketing",Very High,Instagram WhatsApp Sellers
+A,Instagram+WhatsApp Sellers,Home decor sellers,Home decor Instagram sellers,"Order tracking in chats, Inventory confusion, Customer follow-ups, Manual marketing",Very High,Instagram WhatsApp Sellers
+A,Instagram+WhatsApp Sellers,Fashion boutiques,Local fashion on Instagram,"Order tracking in chats, Inventory confusion, Customer follow-ups, Manual marketing",Very High,Instagram WhatsApp Sellers
+A,Instagram+WhatsApp Sellers,Beauty products,Skincare WhatsApp sellers,"Order tracking in chats, Inventory confusion, Customer follow-ups, Manual marketing",Very High,Instagram WhatsApp Sellers
+A,Instagram+WhatsApp Sellers,Sports accessories,Sports gear Instagram sellers,"Order tracking in chats, Inventory confusion, Customer follow-ups, Manual marketing",Very High,Instagram WhatsApp Sellers
+A,Instagram+WhatsApp Sellers,Handmade crafts,Artisan craft sellers on WhatsApp,"Order tracking in chats, Inventory confusion, Customer follow-ups, Manual marketing",Very High,Instagram WhatsApp Sellers
+A,Instagram+WhatsApp Sellers,Leather goods,Leather bags Instagram sellers,"Order tracking in chats, Inventory confusion, Customer follow-ups, Manual marketing",Very High,Instagram WhatsApp Sellers
+A,Instagram+WhatsApp Sellers,Sunglasses,Eyewear Instagram boutiques,"Order tracking in chats, Inventory confusion, Customer follow-ups, Manual marketing",Very High,Instagram WhatsApp Sellers
+A,Instagram+WhatsApp Sellers,Watches,Watch resellers on WhatsApp,"Order tracking in chats, Inventory confusion, Customer follow-ups, Manual marketing",Very High,Instagram WhatsApp Sellers
+A,Instagram+WhatsApp Sellers,Bags & purses,Bag sellers on Instagram,"Order tracking in chats, Inventory confusion, Customer follow-ups, Manual marketing",Very High,Instagram WhatsApp Sellers
+A,Instagram+WhatsApp Sellers,Scarves,Scarf/dupatta Instagram sellers,"Order tracking in chats, Inventory confusion, Customer follow-ups, Manual marketing",Very High,Instagram WhatsApp Sellers
+A,Instagram+WhatsApp Sellers,Footwear,Footwear WhatsApp sellers,"Order tracking in chats, Inventory confusion, Customer follow-ups, Manual marketing",Very High,Instagram WhatsApp Sellers
+A,Instagram+WhatsApp Sellers,Accessories,Fashion accessories Instagram,"Order tracking in chats, Inventory confusion, Customer follow-ups, Manual marketing",Very High,Instagram WhatsApp Sellers
+A,Instagram+WhatsApp Sellers,Perfumes,Perfume WhatsApp resellers,"Order tracking in chats, Inventory confusion, Customer follow-ups, Manual marketing",Very High,Instagram WhatsApp Sellers
+A,Instagram+WhatsApp Sellers,Art prints,Art print Instagram sellers,"Order tracking in chats, Inventory confusion, Customer follow-ups, Manual marketing",Very High,Instagram WhatsApp Sellers
+A,Instagram+WhatsApp Sellers,Electronics accessories,Phone cases/accessories Instagram,"Order tracking in chats, Inventory confusion, Customer follow-ups, Manual marketing",Very High,Instagram WhatsApp Sellers
+B,D2C Brands,Shopify stores,Shopify D2C brands India,"Customer support, Cart abandonment, WhatsApp campaigns, Analytics gaps",High,D2C Brands
+B,D2C Brands,Independent brands,Independent beauty D2C Shopify,"Customer support, Cart abandonment, WhatsApp campaigns, Analytics gaps",High,D2C Brands
+B,D2C Brands,Beauty brands,Skincare D2C brands,"Customer support, Cart abandonment, WhatsApp campaigns, Analytics gaps",High,D2C Brands
+B,D2C Brands,Fashion D2C,Fashion Shopify brands,"Customer support, Cart abandonment, WhatsApp campaigns, Analytics gaps",High,D2C Brands
+B,D2C Brands,Food brands,Organic food D2C,"Customer support, Cart abandonment, WhatsApp campaigns, Analytics gaps",High,D2C Brands
+B,D2C Brands,Skincare brands,Ayurvedic skincare D2C,"Customer support, Cart abandonment, WhatsApp campaigns, Analytics gaps",High,D2C Brands
+B,D2C Brands,Supplement brands,Health supplements D2C,"Customer support, Cart abandonment, WhatsApp campaigns, Analytics gaps",High,D2C Brands
+B,D2C Brands,Pet products,Pet care D2C brands,"Customer support, Cart abandonment, WhatsApp campaigns, Analytics gaps",High,D2C Brands
+B,D2C Brands,Baby products,Baby care D2C brands,"Customer support, Cart abandonment, WhatsApp campaigns, Analytics gaps",High,D2C Brands
+B,D2C Brands,Fitness gear,Fitness equipment D2C,"Customer support, Cart abandonment, WhatsApp campaigns, Analytics gaps",High,D2C Brands
+B,D2C Brands,Organic products,Organic food/lifestyle D2C,"Customer support, Cart abandonment, WhatsApp campaigns, Analytics gaps",High,D2C Brands
+B,D2C Brands,Vegan brands,Vegan lifestyle D2C,"Customer support, Cart abandonment, WhatsApp campaigns, Analytics gaps",High,D2C Brands
+B,D2C Brands,Sustainable brands,Eco-friendly D2C brands,"Customer support, Cart abandonment, WhatsApp campaigns, Analytics gaps",High,D2C Brands
+B,D2C Brands,Luxury brands,Affordable luxury D2C India,"Customer support, Cart abandonment, WhatsApp campaigns, Analytics gaps",High,D2C Brands
+B,D2C Brands,Streetwear,Indian streetwear D2C,"Customer support, Cart abandonment, WhatsApp campaigns, Analytics gaps",High,D2C Brands
+B,D2C Brands,Jewelry D2C,Online jewelry brands,"Customer support, Cart abandonment, WhatsApp campaigns, Analytics gaps",High,D2C Brands
+B,D2C Brands,Tech accessories D2C,Gadget accessories D2C brands,"Customer support, Cart abandonment, WhatsApp campaigns, Analytics gaps",High,D2C Brands
+C,Local Retailers,Electronics stores,Local electronics shops Chennai,"Inventory management, Customer management, Reorders, Repeat purchases",High,Local Retailers
+C,Local Retailers,Fashion stores,Local fashion retail stores,"Inventory management, Customer management, Reorders, Repeat purchases",High,Local Retailers
+C,Local Retailers,Kirana stores,Neighborhood kirana stores,"Inventory management, Customer management, Reorders, Repeat purchases",High,Local Retailers
+C,Local Retailers,Grocery stores,Local grocery stores Chennai,"Inventory management, Customer management, Reorders, Repeat purchases",High,Local Retailers
+C,Local Retailers,Mobile shops,Mobile retail stores,"Inventory management, Customer management, Reorders, Repeat purchases",High,Local Retailers
+C,Local Retailers,Pharmacy stores,Local pharmacies with WhatsApp orders,"Inventory management, Customer management, Reorders, Repeat purchases",High,Local Retailers
+C,Local Retailers,Book stores,Independent bookstores,"Inventory management, Customer management, Reorders, Repeat purchases",High,Local Retailers
+C,Local Retailers,Furniture stores,Local furniture showrooms,"Inventory management, Customer management, Reorders, Repeat purchases",High,Local Retailers
+C,Local Retailers,Appliance stores,White goods retail stores,"Inventory management, Customer management, Reorders, Repeat purchases",High,Local Retailers
+C,Local Retailers,Toy stores,Local toy retailers,"Inventory management, Customer management, Reorders, Repeat purchases",High,Local Retailers
+C,Local Retailers,Sports stores,Local sports equipment shops,"Inventory management, Customer management, Reorders, Repeat purchases",High,Local Retailers
+C,Local Retailers,Garden stores,Nursery and garden shops,"Inventory management, Customer management, Reorders, Repeat purchases",High,Local Retailers
+C,Local Retailers,Hardware stores,Hardware and tools retailers,"Inventory management, Customer management, Reorders, Repeat purchases",High,Local Retailers
+C,Local Retailers,Beauty retail,Local salons with product sales,"Inventory management, Customer management, Reorders, Repeat purchases",High,Local Retailers
+C,Local Retailers,Watch stores,Local watch and clock shops,"Inventory management, Customer management, Reorders, Repeat purchases",High,Local Retailers
+C,Local Retailers,Bag stores,Local luggage and bag retailers,"Inventory management, Customer management, Reorders, Repeat purchases",High,Local Retailers

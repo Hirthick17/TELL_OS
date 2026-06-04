@@ -1,0 +1,7 @@
+node_modules/
+.env
+ecommerce.db
+*.log
+uploads/
+.wa-auth/
+sample-store-data.xlsx
