@@ -4,7 +4,7 @@ const express = require('express');
 const multer  = require('multer');
 const cors    = require('cors');
 const path    = require('path');
-const { detectSheetsAndColumns, streamSheet, extractSamples, buildSheetMetadata, parseExcel } = require('./parser');
+const { detectSheetsAndColumns, streamSheet, extractSamples, buildSheetMetadata, parseExcel, normalizeAndValidateTable } = require('./parser');
 const db                    = require('./db');
 const { chat, friendlyLLMError } = require('./llm');
 const intelligence = require('./intelligence');
@@ -520,96 +520,142 @@ app.post('/upload', upload.single('file'), async (req, res) => {
   const session = await getSession(sessionId);
   const ext = path.extname(req.file.originalname).toLowerCase();
 
-  // ── Image uploads ──────────────────────────────────────────────────────────
-  if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
-    const base64  = req.file.buffer.toString('base64');
-    const dataUrl = `data:${req.file.mimetype};base64,${base64}`;
-    const reply   = `📸 Got your image! If you have business data, upload an Excel file (.xlsx) via 📎 so I can store it in your database.`;
-    session.messages.push({ role: 'user', type: 'image', dataUrl, name: req.file.originalname, time: Date.now() });
-    session.messages.push({ role: 'bot', text: reply, time: Date.now() });
-    return res.json({ success: true, type: 'image', reply, dataUrl, messages: session.messages });
-  }
-
-  // ── Excel uploads — detect columns, build preview ─────────────────────────
   try {
-    // Phase 1: headers-only detection (fast, no data loaded)
-    const plan = detectSheetsAndColumns(req.file.buffer);
+    let cleanColumns = [];
+    let cleanRows = [];
+    let schemaProfile = null;
+    let sheetPlan = null;
+    let isImage = false;
 
-    const knownSheets = plan.sheets;
-    if (knownSheets.length === 0) {
-      const reply = `❌ Couldn't read data from this file.\n\nMake sure columns have labels like:\n• Product Name, Price, SKU\n• Order ID, Customer Name, Amount\n• Stock, Reorder Level\n• Payment ID, Payment Method\n\nTry again with the correct format.`;
-      session.messages.push({ role: 'user', type: 'file', name: req.file.originalname, time: Date.now() });
-      session.messages.push({ role: 'bot', text: reply, time: Date.now() });
-      persistSession(session);
-      return res.json({ success: false, reply, messages: session.messages });
+    if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
+      isImage = true;
+      console.log(`🖼️ [Upload] Extracting table from image: ${req.file.originalname}...`);
+      const extraction = await intelligence.extractTableFromImage(req.file.buffer, req.file.mimetype);
+      
+      if (!extraction.columns || extraction.columns.length === 0 || !extraction.rows || extraction.rows.length === 0) {
+        throw new Error('No structured columns or rows identified in image');
+      }
+
+      // Normalization FIRST
+      const normalized = normalizeAndValidateTable(extraction.columns, extraction.rows);
+      cleanColumns = normalized.columns;
+      cleanRows = normalized.rows;
+
+      // Schema Inference (LLM)
+      console.log(`🤖 [Schema] Inferring dynamic schema profile for Image...`);
+      schemaProfile = await intelligence.inferDatasetSchema(req.file.originalname, cleanColumns, cleanRows);
+
+      const tableName = extraction.tableName || 'Extracted Table';
+      sheetPlan = {
+        sheetName: tableName,
+        type: 'dataset',
+        headers: cleanColumns,
+        columns: cleanColumns,
+        rowCount: cleanRows.length,
+        detectedConcepts: schemaProfile.entities || [],
+        columnMap: cleanColumns.reduce((map, col) => {
+          const norm = col.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (norm.includes('product') || norm.includes('item')) map['product_name'] = col;
+          else if (norm.includes('orderid') || norm.includes('orderno')) map['order_id'] = col;
+          else if (norm.includes('price') || norm.includes('amount') || norm.includes('revenue')) map['order_amount'] = col;
+          else if (norm.includes('qty') || norm.includes('quantity') || norm.includes('stock')) map['stock'] = col;
+          return map;
+        }, {}),
+        confidences: cleanColumns.reduce((map, col) => {
+          map[col] = 0.95;
+          return map;
+        }, {}),
+        unmatchedHeaders: [],
+        needsConfirmation: false,
+        schemaProfile,
+      };
+
+    } else if (['.xlsx', '.xls', '.csv'].includes(ext)) {
+      console.log(`📂 [Upload] Parsing Excel file: ${req.file.originalname}...`);
+      const XLSX = require('xlsx');
+      const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const rawRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+
+      const plan = detectSheetsAndColumns(req.file.buffer);
+      const knownSheets = plan.sheets;
+
+      if (knownSheets.length === 0 || rawRows.length === 0) {
+        throw new Error("Couldn't read data from this Excel file. Make sure it has clear columns and rows.");
+      }
+
+      const firstSheetPlan = knownSheets[0];
+      const rawColumns = firstSheetPlan.headers;
+
+      // Normalization FIRST
+      const normalized = normalizeAndValidateTable(rawColumns, rawRows);
+      cleanColumns = normalized.columns;
+      cleanRows = normalized.rows;
+
+      // Schema Inference (LLM)
+      console.log(`🤖 [Schema] Inferring dynamic schema profile for Excel file...`);
+      schemaProfile = await intelligence.inferDatasetSchema(req.file.originalname, cleanColumns, cleanRows);
+
+      // Update sheet plan with cleaned columns and metadata
+      firstSheetPlan.headers = cleanColumns;
+      firstSheetPlan.columns = cleanColumns;
+      firstSheetPlan.rowCount = cleanRows.length;
+      firstSheetPlan.schemaProfile = schemaProfile;
+      firstSheetPlan.type = 'dataset';
+      firstSheetPlan.detectedConcepts = schemaProfile.entities || [];
+      sheetPlan = firstSheetPlan;
+
+    } else {
+      return res.status(400).json({ error: `Unsupported file format: ${ext}. Please upload an Excel sheet or an Image.` });
     }
 
-    // Build summary lines
-    const typeCounts = {};
-    for (const s of knownSheets) {
-      typeCounts[s.type] = (typeCounts[s.type] || 0) + s.rowCount;
-    }
-    const EMOJI = { products: '📦', orders: '🛒', inventory: '🏪', payments: '💳' };
-    const lines = Object.entries(typeCounts).map(([t, c]) => `${EMOJI[t] || '📄'} *${c} ${t.charAt(0).toUpperCase()+t.slice(1)}* detected`);
-
-    // Sheet breakdown with column confidence info
-    const sheetInfo = knownSheets.map(s => {
-      const lowConf = Object.entries(s.confidences || {}).filter(([, v]) => v < 0.9).map(([k]) => k);
-      const flagNote = lowConf.length > 0 ? ` ⚠️ (low confidence: ${lowConf.join(', ')})` : '';
-      return `  • ${s.sheetName} → ${s.type} (${s.rowCount} rows, cols: ${s.headers.slice(0,3).join(', ')}...)${flagNote}`;
-    }).join('\n');
-
-    // Build column confirmation prompts for any unmatched headers
-    const unmatchedBySheet = knownSheets
-      .filter(s => s.unmatchedHeaders && s.unmatchedHeaders.length > 0)
-      .map(s => `  • ${s.sheetName}: ${s.unmatchedHeaders.join(', ')}`)
-      .join('\n');
-
-    // Store plan in session for /upload/confirm
     session.pendingUploadPlan = {
-      sheetPlans: plan.sheets,
-      fileBuffer: req.file.buffer.toString('base64'),   // base64 for session storage
-      fileName:   req.file.originalname,
+      isImage,
+      sheetPlans: [sheetPlan],
+      fileName: req.file.originalname,
+      extractedRows: cleanRows,
+      schemaProfile,
+    };
+    // Also save in pendingPreview for WhatsApp consistency
+    session.pendingPreview = {
+      sheetSummary: [sheetPlan],
+      sheetPlans: [sheetPlan],
+      fileName: req.file.originalname,
+      extractedRows: cleanRows,
+      schemaProfile,
+      isImage,
     };
     session.awaitingUpload = false;
 
-    let botReply = `✅ I've scanned *${req.file.originalname}*\n\n` +
-      `Here's what I found:\n${lines.join('\n')}\n\n` +
-      `📋 Sheet breakdown:\n${sheetInfo}`;
-
-    if (unmatchedBySheet) {
-      botReply += `\n\n⚠️ Some columns couldn't be auto-identified:\n${unmatchedBySheet}\n` +
-        `These will be stored with their original names.`;
-    }
-
-    botReply += `\n\n💾 Should I store this data in your account?\nReply *Yes* to save, or *No* to cancel.`;
+    // Build LLM-driven preview response
+    const label = isImage ? '📸 Scanned image and identified table' : '📂 Scanned Excel';
+    const botReply = `${label} *"${sheetPlan.sheetName}"*\n\n` +
+      `🧬 *Dataset Type:* ${schemaProfile.datasetType.replace(/_/g, ' ').toUpperCase()} (Confidence: ${(schemaProfile.confidence * 100).toFixed(0)}%)\n` +
+      `📝 *Description:* ${schemaProfile.description}\n\n` +
+      `📊 *Columns Profiled:*\n` +
+      `• *Measures (Metrics):* ${schemaProfile.measures.join(', ') || 'none'}\n` +
+      `• *Dimensions (Filters/Groups):* ${schemaProfile.dimensions.join(', ') || 'none'}\n\n` +
+      `💾 Should I store this data in your account?\nReply *Yes* to save, or *No* to cancel.`;
 
     session.messages.push({ role: 'user', type: 'file', name: req.file.originalname, time: Date.now() });
     session.messages.push({ role: 'bot', text: botReply, hasPendingStore: true, time: Date.now() });
-    session.history.push({ role: 'user',  parts: [{ text: `[Uploaded file: ${req.file.originalname}]` }] });
+    session.history.push({ role: 'user', parts: [{ text: `[Uploaded file: ${req.file.originalname}]` }] });
     session.history.push({ role: 'model', parts: [{ text: botReply }] });
     persistSession(session);
 
-    res.json({
+    return res.json({
       success: true,
       type: 'preview',
       reply: botReply,
-      preview: typeCounts,
       hasPendingStore: true,
-      needsConfirmation: plan.needsConfirmation,
-      sheetPlans: plan.sheets.map(s => ({
-        sheetName:        s.sheetName,
-        type:             s.type,
-        rowCount:         s.rowCount,
-        columnMap:        s.columnMap,
-        confidences:      s.confidences,
-        unmatchedHeaders: s.unmatchedHeaders,
-      })),
+      needsConfirmation: false,
+      sheetPlans: [sheetPlan],
       messages: session.messages,
     });
 
   } catch (err) {
-    console.error('Upload error:', err.message);
+    console.error('Upload processing error:', err.message);
     res.status(500).json({ error: `File processing failed: ${err.message}` });
   }
 });
@@ -621,7 +667,7 @@ app.post('/upload/confirm', async (req, res) => {
     if (!sessionId) return res.status(400).json({ error: 'sessionId is required' });
 
     const session = await getSession(sessionId);
-    const plan    = session.pendingUploadPlan;
+    const plan = session.pendingUploadPlan;
     if (!plan) return res.status(400).json({ error: 'No pending upload. Upload a file first.' });
 
     // Acknowledge immediately — streaming happens async
@@ -631,130 +677,134 @@ app.post('/upload/confirm', async (req, res) => {
 
     // ── Async streaming insert (after response sent) ──────────────────────────
     setImmediate(async () => {
-    try {
-      const fileBuffer = Buffer.from(plan.fileBuffer, 'base64');
-      const knownSheets = plan.sheetPlans.filter(s => s.type !== 'unknown');
+      try {
+        const knownSheets = plan.sheetPlans.filter(s => s.type !== 'unknown');
+        const totalRows = plan.extractedRows ? plan.extractedRows.length : 0;
+        session.uploadProgress.total = totalRows;
 
-      // Count total rows across all sheets
-      const totalRows = knownSheets.reduce((sum, s) => sum + s.rowCount, 0);
-      session.uploadProgress.total = totalRows;
+        const { datasetId } = await db.prepareUploadSession(
+          sessionId,
+          plan.fileName,
+          knownSheets
+        );
+        console.log("Dataset created:", datasetId);
 
-      const { datasetId } = await db.prepareUploadSession(
-        sessionId,
-        plan.fileName,
-        knownSheets
-      );
-      console.log("Dataset created:", datasetId);
+        const metaSheets = [];
+        let insertedTotal = 0;
 
-      // Collect metadata per sheet
-      const metaSheets = [];
-      let insertedTotal = 0;
+        for (const sheetPlan of knownSheets) {
+          const rows = plan.extractedRows || [];
+          let sheetRows = 0;
+          let firstBatchRows = null;
 
-      for (const sheetPlan of knownSheets) {
-        let sheetRows = 0;
-        let firstBatchRows = null;
+          // Process in batches of 200
+          const BATCH_SIZE = 200;
+          for (let offset = 0; offset < rows.length; offset += BATCH_SIZE) {
+            const batch = rows.slice(offset, offset + BATCH_SIZE);
+            await db.insertDatasetRecordsBatch(
+              sessionId,
+              datasetId,
+              sheetPlan.sheetName,
+              batch,
+              offset + 1
+            );
+            sheetRows += batch.length;
+            insertedTotal += batch.length;
+            if (!firstBatchRows) firstBatchRows = batch;
 
-        let startRow = 1;
-        await streamSheet(fileBuffer, sheetPlan.sheetName, async (batch) => {
-          await db.insertDatasetRecordsBatch(
-            sessionId,
-            datasetId,
-            sheetPlan.sheetName,
-            batch,
-            startRow
-          );
-          startRow += batch.length;
-          sheetRows    += batch.length;
-          insertedTotal += batch.length;
-          if (!firstBatchRows) firstBatchRows = batch;
+            // Live progress update
+            session.uploadProgress.inserted = insertedTotal;
+            persistSession(session);
+          }
 
-          // Live progress update
-          session.uploadProgress.inserted = insertedTotal;
-          persistSession(session);
+          // Extract sample values from first batch for LLM context
+          const sampleValues = firstBatchRows
+            ? extractSamples(firstBatchRows, sheetPlan.columnMap, 3)
+            : {};
+
+          const sheetMeta = buildSheetMetadata(sheetPlan, firstBatchRows || []);
+
+          metaSheets.push({
+            sheetName:        sheetPlan.sheetName,
+            semanticType:     sheetPlan.type,
+            rowCount:         sheetRows,
+            columnMap:        sheetPlan.columnMap,
+            confidences:      sheetPlan.confidences,
+            unmatchedHeaders: sheetPlan.unmatchedHeaders,
+            sampleValues,
+            columns:          sheetMeta.columns,
+            detectedConcepts: sheetMeta.detectedConcepts,
+            columnProfiles:   sheetMeta.columnProfiles,
+          });
+        }
+
+        // Compute metadata and insights
+        const allColumns = [...new Set(metaSheets.flatMap(s => s.columns || Object.keys(s.columnMap || {})))];
+        const allConcepts = [...new Set(metaSheets.flatMap(s => s.detectedConcepts || []))];
+        const allProfiles = metaSheets.flatMap(s => s.columnProfiles || []);
+
+        const revenueSheet = metaSheets.find(s =>
+          s.columnMap?.order_amount || s.columnMap?.price
+        );
+        const insights = {
+          hasOrders:    metaSheets.some(s => s.columnMap?.order_id),
+          hasProducts:  metaSheets.some(s => s.columnMap?.product_name),
+          hasInventory: metaSheets.some(s => s.columnMap?.stock),
+          hasPayments:  metaSheets.some(s => s.columnMap?.payment_method),
+          totalRows:    insertedTotal,
+          primarySheet: metaSheets[0]?.sheetName || null,
+          revenueField: revenueSheet?.columnMap?.order_amount || revenueSheet?.columnMap?.price || null,
+        };
+
+        await db.saveDatasetMetadata(sessionId, datasetId, {
+          columns:          allColumns,
+          detectedConcepts: allConcepts,
+          columnProfiles:   allProfiles,
+          sheets:           metaSheets,
+          schemaProfile:    plan.schemaProfile,
         });
 
-        // Extract sample values from first batch for LLM context
-        const sampleValues = firstBatchRows
-          ? extractSamples(firstBatchRows, sheetPlan.columnMap, 3)
-          : {};
+        // Generate rich AI business insights using NVIDIA NIM
+        const sampleRows = metaSheets[0]?.sampleValues || {};
+        let aiInsights = {};
+        if (plan.schemaProfile && plan.schemaProfile.aiInsights) {
+          aiInsights = plan.schemaProfile.aiInsights;
+        } else {
+          aiInsights = await intelligence.generateDatasetInsights(plan.fileName, allColumns, sampleRows).catch(() => ({}));
+        }
 
-        const sheetMeta = buildSheetMetadata(sheetPlan, firstBatchRows || []);
-
-        metaSheets.push({
-          sheetName:        sheetPlan.sheetName,
-          semanticType:     sheetPlan.type,
-          rowCount:         sheetRows,
-          columnMap:        sheetPlan.columnMap,
-          confidences:      sheetPlan.confidences,
-          unmatchedHeaders: sheetPlan.unmatchedHeaders,
-          sampleValues,
-          columns:          sheetMeta.columns,
-          detectedConcepts: sheetMeta.detectedConcepts,
-          columnProfiles:   sheetMeta.columnProfiles,
+        await db.saveDatasetInsights(sessionId, datasetId, {
+          schemaProfile:    plan.schemaProfile,
+          aiInsights,
         });
+        await db.updateDataset(datasetId, { rowCount: insertedTotal });
+
+        // Finalize session
+        session.uploadProgress.status = 'done';
+        session.uploadProgress.inserted = insertedTotal;
+        session.pendingUploadPlan = null;
+        session.uploadDone = true;
+        session.pendingConfirmation = false;
+        session.activeFlow = null;
+
+        const hostUrl = (req.get('host').includes('localhost') || req.get('host').includes('127.0.0.1'))
+          ? `http://${req.get('host')}`
+          : PUBLIC_URL;
+        const dashboardUrl = `${hostUrl}/dashboard/${sessionId}`;
+        const doneMsg = `🎉 Done! ${insertedTotal} rows saved across ${metaSheets.length} dataset(s).\n\n📊 Your live dashboard:\n${dashboardUrl}\n\nBookmark it — it refreshes every 10 seconds! 🚀`;
+        session.messages.push({ role: 'bot', text: doneMsg, dashboardUrl, time: Date.now() });
+        session.history.push({ role: 'model', parts: [{ text: doneMsg }] });
+        persistSession(session);
+
+        console.log(`✅ Streaming insert complete: ${insertedTotal} rows | session ${sessionId.slice(0,8)}`);
+
+      } catch (err) {
+        console.error('Streaming insert error:', err.message);
+        session.uploadProgress.status = 'error';
+        session.uploadProgress.error = err.message;
+        persistSession(session);
       }
-
-      // Compute metadata and insights
-      const allColumns = [...new Set(metaSheets.flatMap(s => s.columns || Object.keys(s.columnMap || {})))];
-      const allConcepts = [...new Set(metaSheets.flatMap(s => s.detectedConcepts || []))];
-      const allProfiles = metaSheets.flatMap(s => s.columnProfiles || []);
-
-      const revenueSheet = metaSheets.find(s =>
-        s.columnMap?.order_amount || s.columnMap?.price
-      );
-      const insights = {
-        hasOrders:    metaSheets.some(s => s.columnMap?.order_id),
-        hasProducts:  metaSheets.some(s => s.columnMap?.product_name),
-        hasInventory: metaSheets.some(s => s.columnMap?.stock),
-        hasPayments:  metaSheets.some(s => s.columnMap?.payment_method),
-        totalRows:    insertedTotal,
-        primarySheet: metaSheets[0]?.sheetName || null,
-        revenueField: revenueSheet?.columnMap?.order_amount || revenueSheet?.columnMap?.price || null,
-      };
-
-      await db.saveDatasetMetadata(sessionId, datasetId, {
-        columns:          allColumns,
-        detectedConcepts: allConcepts,
-        columnProfiles:   allProfiles,
-        sheets:           metaSheets,
-      });
-
-      // Generate rich AI business insights using NVIDIA NIM Mixtral MoE
-      const sampleRows = metaSheets[0]?.sampleValues || {};
-      const aiInsights = await intelligence.generateDatasetInsights(plan.fileName, allColumns, sampleRows).catch(() => ({}));
-
-      await db.saveDatasetInsights(sessionId, datasetId, {
-        ...insights,
-        aiInsights,
-      });
-      await db.updateDataset(datasetId, { rowCount: insertedTotal });
-
-      // Finalize session
-      session.uploadProgress.status   = 'done';
-      session.uploadProgress.inserted = insertedTotal;
-      session.pendingUploadPlan        = null;
-      session.uploadDone               = true;
-      session.pendingConfirmation      = false;
-      session.activeFlow               = null;
-
-      const hostUrl = (req.get('host').includes('localhost') || req.get('host').includes('127.0.0.1'))
-        ? `http://${req.get('host')}`
-        : PUBLIC_URL;
-      const dashboardUrl = `${hostUrl}/dashboard/${sessionId}`;
-      const doneMsg = `🎉 Done! ${insertedTotal} rows saved across ${metaSheets.length} dataset(s).\n\n📊 Your live dashboard:\n${dashboardUrl}\n\nBookmark it — it refreshes every 10 seconds! 🚀`;
-      session.messages.push({ role: 'bot', text: doneMsg, dashboardUrl, time: Date.now() });
-      session.history.push({ role: 'model', parts: [{ text: doneMsg }] });
-      persistSession(session);
-
-      console.log(`✅ Streaming insert complete: ${insertedTotal} rows | session ${sessionId.slice(0,8)}`);
-
-    } catch (err) {
-      console.error('Streaming insert error:', err.message);
-      session.uploadProgress.status = 'error';
-      session.uploadProgress.error  = err.message;
-      persistSession(session);
-    }
-  });
+    });
   } catch (err) {
     console.error('Confirm error:', err.message);
     res.status(500).json({ error: err.message });

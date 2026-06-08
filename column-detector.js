@@ -359,8 +359,8 @@ function profileColumns(headers = [], sampleRows = []) {
 
     const numericCount = values.filter(v => {
       if (typeof v === 'number') return Number.isFinite(v);
-      const n = Number(String(v).replace(/[^\d.-]/g, ''));
-      return Number.isFinite(n) && String(v).trim() !== '';
+      const clean = String(v).replace(/[\$,₹€£%]/g, '').replace(/,/g, '').trim();
+      return clean.length > 0 && !isNaN(Number(clean));
     }).length;
 
     const type = values.length > 0 && numericCount / values.length >= 0.8

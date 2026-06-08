@@ -216,8 +216,9 @@ async function handleTextMessage(client, msg, session, phoneNumber) {
   if (session.pendingPreview && YES.test(lower)) {
     const p = session.pendingPreview;
     try {
-      const fileBuffer = Buffer.from(p.fileBuffer, 'base64');
-      const knownSheets = p.sheetSummary.filter(s => s.type !== 'unknown');
+      const knownSheets = p.sheetPlans || p.sheetSummary;
+      const sheetPlan = knownSheets[0];
+      const rows = p.extractedRows || [];
 
       const { datasetId } = await db.prepareUploadSession(
         session.sessionId,
@@ -232,20 +233,21 @@ async function handleTextMessage(client, msg, session, phoneNumber) {
         let sheetRows = 0;
         let firstBatchRows = null;
 
-        let startRow = 1;
-        await streamSheet(fileBuffer, sheetPlan.sheetName, async (batch) => {
+        // Process in batches of 200
+        const BATCH_SIZE = 200;
+        for (let offset = 0; offset < rows.length; offset += BATCH_SIZE) {
+          const batch = rows.slice(offset, offset + BATCH_SIZE);
           await db.insertDatasetRecordsBatch(
             session.sessionId,
             datasetId,
             sheetPlan.sheetName,
             batch,
-            startRow
+            offset + 1
           );
-          startRow += batch.length;
           sheetRows += batch.length;
           insertedTotal += batch.length;
           if (!firstBatchRows) firstBatchRows = batch;
-        });
+        }
 
         // Extract sample values from first batch for LLM context
         const sampleValues = firstBatchRows
@@ -291,14 +293,20 @@ async function handleTextMessage(client, msg, session, phoneNumber) {
         detectedConcepts: allConcepts,
         columnProfiles:   allProfiles,
         sheets:           metaSheets,
+        schemaProfile:    p.schemaProfile,
       });
 
-      // Generate rich AI business insights using NVIDIA NIM Mixtral MoE
+      // Generate rich AI business insights using NVIDIA NIM
       const sampleRows = metaSheets[0]?.sampleValues || {};
-      const aiInsights = await intelligence.generateDatasetInsights(p.fileName, allColumns, sampleRows).catch(() => ({}));
+      let aiInsights = {};
+      if (p.schemaProfile && p.schemaProfile.aiInsights) {
+        aiInsights = p.schemaProfile.aiInsights;
+      } else {
+        aiInsights = await intelligence.generateDatasetInsights(p.fileName, allColumns, sampleRows).catch(() => ({}));
+      }
 
       await db.saveDatasetInsights(session.sessionId, datasetId, {
-        ...insights,
+        schemaProfile:    p.schemaProfile,
         aiInsights,
       });
       await db.updateDataset(datasetId, { rowCount: insertedTotal });
@@ -313,6 +321,7 @@ async function handleTextMessage(client, msg, session, phoneNumber) {
       const reply = `🎉 Done! ${insertedTotal} rows saved across ${metaSheets.length} sheet(s).\n\n📊 Your live dashboard:\n${dashboardUrl}`;
       
       session.history.push({ role: 'model', parts: [{ text: reply }] });
+      persistSession(session);
       return client.sendMessage(waId, reply);
 
     } catch (err) {
@@ -353,6 +362,93 @@ async function handleTextMessage(client, msg, session, phoneNumber) {
   }
 }
 
+// ─── Handle Image file attachment ──────────────────────────────────────────
+async function handleImageMessage(client, msg, session) {
+  const waId = msg.from;
+  try {
+    await client.sendMessage(waId, '📥 Got your image! Scanning it...');
+
+    const media = await msg.downloadMedia();
+    if (!media) {
+      await client.sendMessage(waId, '❌ Could not download the image. Please try again.');
+      return;
+    }
+
+    const buffer = Buffer.from(media.data, 'base64');
+    const mimeType = media.mimetype || 'image/jpeg';
+    const filename = msg._data?.filename || 'scanned_image.jpg';
+
+    console.log(`🖼️ [WA-Client] Extracting table from image...`);
+    const extraction = await intelligence.extractTableFromImage(buffer, mimeType);
+
+    if (!extraction.columns || extraction.columns.length === 0 || !extraction.rows || extraction.rows.length === 0) {
+      await client.sendMessage(waId, `❌ No structured table or register found in the image. Please ensure the image is clear and contains tabular data.`);
+      return;
+    }
+
+    // Normalization FIRST
+    const { columns: cleanColumns, rows: cleanRows } = normalizeAndValidateTable(extraction.columns, extraction.rows);
+
+    // Schema Inference (LLM)
+    console.log(`🤖 [Schema] Inferring dynamic schema profile for Image...`);
+    const schemaProfile = await intelligence.inferDatasetSchema(filename, cleanColumns, cleanRows);
+
+    const tableName = extraction.tableName || 'Extracted Table';
+    const sheetPlan = {
+      sheetName: tableName,
+      type: 'dataset',
+      headers: cleanColumns,
+      columns: cleanColumns,
+      rowCount: cleanRows.length,
+      detectedConcepts: schemaProfile.entities || [],
+      columnMap: cleanColumns.reduce((map, col) => {
+        const norm = col.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (norm.includes('product') || norm.includes('item')) map['product_name'] = col;
+        else if (norm.includes('orderid') || norm.includes('orderno')) map['order_id'] = col;
+        else if (norm.includes('price') || norm.includes('amount') || norm.includes('revenue')) map['order_amount'] = col;
+        else if (norm.includes('qty') || norm.includes('quantity') || norm.includes('stock')) map['stock'] = col;
+        return map;
+      }, {}),
+      confidences: cleanColumns.reduce((map, col) => {
+        map[col] = 0.95;
+        return map;
+      }, {}),
+      unmatchedHeaders: [],
+      needsConfirmation: false,
+      schemaProfile,
+    };
+
+    session.pendingPreview = {
+      isImage: true,
+      sheetPlans: [sheetPlan],
+      sheetSummary: [sheetPlan], // for compatibility
+      fileName: filename,
+      extractedRows: cleanRows,
+      schemaProfile,
+    };
+    session.awaitingUpload = false;
+
+    // Build LLM-driven preview response
+    const botReply = `📸 I've scanned your image and identified the table *"${sheetPlan.sheetName}"*\n\n` +
+      `🧬 *Dataset Type:* ${schemaProfile.datasetType.replace(/_/g, ' ').toUpperCase()} (Confidence: ${(schemaProfile.confidence * 100).toFixed(0)}%)\n` +
+      `📝 *Description:* ${schemaProfile.description}\n\n` +
+      `📊 *Columns Profiled:*\n` +
+      `• *Measures (Metrics):* ${schemaProfile.measures.join(', ') || 'none'}\n` +
+      `• *Dimensions (Filters/Groups):* ${schemaProfile.dimensions.join(', ') || 'none'}\n\n` +
+      `💾 *Should I store this data in your account?*\nReply *Yes* to save, or *No* to cancel.`;
+
+    session.history.push({ role: 'user', parts: [{ text: `[Sent Image: ${filename}]` }] });
+    session.history.push({ role: 'model', parts: [{ text: botReply }] });
+    persistSession(session);
+
+    await client.sendMessage(waId, botReply);
+
+  } catch (err) {
+    console.error('WA image scan error:', err.message);
+    await client.sendMessage(waId, `❌ Error scanning image: ${err.message}`);
+  }
+}
+
 // ─── Handle Excel file attachment ──────────────────────────────────────────
 async function handleFileMessage(client, msg, session) {
   const waId = msg.from;
@@ -375,58 +471,64 @@ async function handleFileMessage(client, msg, session) {
       return;
     }
 
+    const XLSX = require('xlsx');
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
+    const rawRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+
     const plan = detectSheetsAndColumns(buffer);
     const knownSheets = plan.sheets;
 
-    if (knownSheets.length === 0) {
-      const reply = `❌ Couldn't read data from this file.\n\nMake sure columns have labels like:\n• Product Name, Price, SKU\n• Order ID, Customer Name, Amount\n• Stock, Reorder Level\n• Payment ID, Payment Method\n\nTry again with the correct format.`;
+    if (knownSheets.length === 0 || rawRows.length === 0) {
+      const reply = `❌ Couldn't read data from this file.\n\nMake sure your spreadsheet has clear columns and rows.`;
       await client.sendMessage(waId, reply);
       return;
     }
 
-    // Build summary lines
-    const typeCounts = {};
-    for (const s of knownSheets) {
-      typeCounts[s.type] = (typeCounts[s.type] || 0) + s.rowCount;
-    }
-    const EMOJI = { products: '📦', orders: '🛒', inventory: '🏪', payments: '💳' };
-    const lines = Object.entries(typeCounts).map(([t, c]) => `${EMOJI[t] || '📄'} *${c} ${t.charAt(0).toUpperCase()+t.slice(1)}* detected`);
+    const firstSheetPlan = knownSheets[0];
+    const rawColumns = firstSheetPlan.headers;
 
-    // Store in pending (don't save to DB yet)
+    // Normalization FIRST
+    const { columns: cleanColumns, rows: cleanRows } = normalizeAndValidateTable(rawColumns, rawRows);
+
+    // Schema Inference Layer (LLM)
+    console.log(`🤖 [Schema] Inferring dynamic schema profile for Excel file...`);
+    const schemaProfile = await intelligence.inferDatasetSchema(filename, cleanColumns, cleanRows);
+
+    // Update sheet plan with cleaned columns and metadata
+    firstSheetPlan.headers = cleanColumns;
+    firstSheetPlan.columns = cleanColumns;
+    firstSheetPlan.rowCount = cleanRows.length;
+    firstSheetPlan.schemaProfile = schemaProfile;
+    firstSheetPlan.type = 'dataset';
+    firstSheetPlan.detectedConcepts = schemaProfile.entities || [];
+
     session.pendingPreview = {
-      sheetSummary: plan.sheets,
+      isImage: false,
+      sheetPlans: [firstSheetPlan],
+      sheetSummary: [firstSheetPlan],
       fileName: filename,
-      fileBuffer: media.data, // save base64
-      hostUrl: PUBLIC_URL,
+      extractedRows: cleanRows,
+      schemaProfile,
     };
     session.awaitingUpload = false;
+    persistSession(session);
 
-    const sheetInfo = knownSheets.map(s => {
-      const lowConf = Object.entries(s.confidences || {}).filter(([, v]) => v < 0.9).map(([k]) => k);
-      const flagNote = lowConf.length > 0 ? ` ⚠️ (low confidence: ${lowConf.join(', ')})` : '';
-      return `  • ${s.sheetName} → ${s.type} (${s.rowCount} rows, cols: ${s.headers.slice(0,3).join(', ')}...)${flagNote}`;
-    }).join('\n');
+    // Build LLM-driven preview response
+    const botReply = `📂 Scanned Excel *"${firstSheetPlan.sheetName}"*\n\n` +
+      `🧬 *Dataset Type:* ${schemaProfile.datasetType.replace(/_/g, ' ').toUpperCase()} (Confidence: ${(schemaProfile.confidence * 100).toFixed(0)}%)\n` +
+      `📝 *Description:* ${schemaProfile.description}\n\n` +
+      `📊 *Columns Profiled:*\n` +
+      `• *Measures (Metrics):* ${schemaProfile.measures.join(', ') || 'none'}\n` +
+      `• *Dimensions (Filters/Groups):* ${schemaProfile.dimensions.join(', ') || 'none'}\n\n` +
+      `💾 *Should I store this data in your account?*\nReply *Yes* to save, or *No* to cancel.`;
 
-    const unmatchedBySheet = knownSheets
-      .filter(s => s.unmatchedHeaders && s.unmatchedHeaders.length > 0)
-      .map(s => `  • ${s.sheetName}: ${s.unmatchedHeaders.join(', ')}`)
-      .join('\n');
+    session.history.push({ role: 'user', parts: [{ text: `[Sent Excel: ${filename}]` }] });
+    session.history.push({ role: 'model', parts: [{ text: botReply }] });
+    persistSession(session);
 
-    let reply = `✅ Scanned *${filename}*\n\n` +
-      `Here's what I found:\n${lines.join('\n')}\n\n` +
-      `📋 Sheets:\n${sheetInfo}`;
-
-    if (unmatchedBySheet) {
-      reply += `\n\n⚠️ Some columns couldn't be auto-identified:\n${unmatchedBySheet}\n` +
-        `These will be stored with their original names.`;
-    }
-
-    reply += `\n\n💾 *Should I store this data in your account?*\nReply *Yes* to save or *No* to cancel.`;
-
-    session.history.push({ role: 'user', parts: [{ text: `[Sent Excel file: ${filename}]` }] });
-    session.history.push({ role: 'model', parts: [{ text: reply }] });
-
-    await client.sendMessage(waId, reply);
+    await client.sendMessage(waId, botReply);
 
   } catch (err) {
     console.error('WA file error:', err.message);
@@ -505,8 +607,11 @@ function initWhatsApp() {
       if (msg.type === 'chat') {
         // Regular text message
         await handleTextMessage(client, msg, session, phoneNumber);
-      } else if (msg.hasMedia && ['document', 'image'].includes(msg.type)) {
-        // File or image attachment
+      } else if (msg.hasMedia && msg.type === 'image') {
+        // Image attachment
+        await handleImageMessage(client, msg, session);
+      } else if (msg.hasMedia && msg.type === 'document') {
+        // File attachment
         await handleFileMessage(client, msg, session);
       } else {
         await client.sendMessage(msg.from, `👋 Please send a text message or an Excel file (.xlsx) to get started!`);

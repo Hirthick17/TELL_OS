@@ -371,6 +371,17 @@ async function executeQueryPlan(merchantId, datasetId, queryPlan) {
           },
         });
       }
+
+      // Add sorting stage
+      if (queryPlan.sort && queryPlan.sort.field) {
+        const sortField = queryPlan.sort.field === 'result' ? 'result' : `_id`;
+        const sortOrder = parseInt(queryPlan.sort.order) || -1;
+        pipeline.push({ $sort: { [sortField]: sortOrder } });
+      } else if (groupBy) {
+        // Fallback: Default to sort by result descending if grouped and no sort specified
+        pipeline.push({ $sort: { result: -1 } });
+      }
+
       pipeline.push({ $limit: limit });
     }
 

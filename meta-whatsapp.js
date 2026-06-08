@@ -5,7 +5,7 @@
 require('dotenv').config();
 const axios                  = require('axios');
 const path                   = require('path');
-const { parseExcel, streamSheet, extractSamples, buildSheetMetadata } = require('./parser');
+const { parseExcel, streamSheet, extractSamples, buildSheetMetadata, normalizeAndValidateTable } = require('./parser');
 const db                     = require('./db');
 const { chat, friendlyLLMError } = require('./llm');
 const { getSessionByPhone, persistSession } = require('./sessions');
@@ -371,8 +371,8 @@ async function handleTextMessage(waId, text, hostUrl) {
   if (session.pendingPreview && YES.test(lower)) {
     const p = session.pendingPreview;
     try {
-      const fileBuffer = Buffer.from(p.fileBuffer, 'base64');
-      const knownSheets = p.sheetSummary.filter(s => s.type !== 'unknown');
+      const knownSheets = p.sheetPlans || p.sheetSummary;
+      const rows = p.extractedRows || [];
 
       const { datasetId } = await db.prepareUploadSession(
         session.sessionId,
@@ -387,20 +387,21 @@ async function handleTextMessage(waId, text, hostUrl) {
         let sheetRows = 0;
         let firstBatchRows = null;
 
-        let startRow = 1;
-        await streamSheet(fileBuffer, sheetPlan.sheetName, async (batch) => {
+        // Process in batches of 200
+        const BATCH_SIZE = 200;
+        for (let offset = 0; offset < rows.length; offset += BATCH_SIZE) {
+          const batch = rows.slice(offset, offset + BATCH_SIZE);
           await db.insertDatasetRecordsBatch(
             session.sessionId,
             datasetId,
             sheetPlan.sheetName,
             batch,
-            startRow
+            offset + 1
           );
-          startRow += batch.length;
           sheetRows += batch.length;
           insertedTotal += batch.length;
           if (!firstBatchRows) firstBatchRows = batch;
-        });
+        }
 
         // Extract sample values from first batch for LLM context
         const sampleValues = firstBatchRows
@@ -446,14 +447,20 @@ async function handleTextMessage(waId, text, hostUrl) {
         detectedConcepts: allConcepts,
         columnProfiles:   allProfiles,
         sheets:           metaSheets,
+        schemaProfile:    p.schemaProfile,
       });
 
-      // Generate rich AI business insights using NVIDIA NIM Mixtral MoE
+      // Generate rich AI business insights using NVIDIA NIM
       const sampleRows = metaSheets[0]?.sampleValues || {};
-      const aiInsights = await intelligence.generateDatasetInsights(p.fileName, allColumns, sampleRows).catch(() => ({}));
+      let aiInsights = {};
+      if (p.schemaProfile && p.schemaProfile.aiInsights) {
+        aiInsights = p.schemaProfile.aiInsights;
+      } else {
+        aiInsights = await intelligence.generateDatasetInsights(p.fileName, allColumns, sampleRows).catch(() => ({}));
+      }
 
       await db.saveDatasetInsights(session.sessionId, datasetId, {
-        ...insights,
+        schemaProfile:    p.schemaProfile,
         aiInsights,
       });
       await db.updateDataset(datasetId, { rowCount: insertedTotal });
@@ -512,6 +519,174 @@ async function handleTextMessage(waId, text, hostUrl) {
   }
 }
 
+// ─── Handle Image file attachment ──────────────────────────────────────────
+async function handleImageMessage(waId, mediaId, hostUrl) {
+  const session = await getSessionByPhone(waId);
+  await sendMessage(waId, '📥 Got your image! Scanning it now...');
+
+  const buffer = await downloadMedia(mediaId);
+  if (!buffer) {
+    await sendMessage(waId, '❌ Could not download the image. Please try again.');
+    return;
+  }
+
+  try {
+    console.log(`🖼️ [WA-Meta] Extracting table from image...`);
+    const extraction = await intelligence.extractTableFromImage(buffer, 'image/jpeg');
+
+    if (!extraction.columns || extraction.columns.length === 0 || !extraction.rows || extraction.rows.length === 0) {
+      await sendMessage(waId, `❌ No structured table or register found in the image. Please ensure the image is clear and contains tabular data.`);
+      return;
+    }
+
+    // Normalization FIRST
+    const { columns: cleanColumns, rows: cleanRows } = normalizeAndValidateTable(extraction.columns, extraction.rows);
+
+    // Schema Inference (LLM)
+    console.log(`🤖 [Schema] Inferring dynamic schema profile for Image...`);
+    const schemaProfile = await intelligence.inferDatasetSchema('scanned_image.jpg', cleanColumns, cleanRows);
+
+    const tableName = extraction.tableName || 'Extracted Table';
+    const sheetPlan = {
+      sheetName: tableName,
+      type: 'dataset',
+      headers: cleanColumns,
+      columns: cleanColumns,
+      rowCount: cleanRows.length,
+      detectedConcepts: schemaProfile.entities || [],
+      columnMap: cleanColumns.reduce((map, col) => {
+        const norm = col.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (norm.includes('product') || norm.includes('item')) map['product_name'] = col;
+        else if (norm.includes('orderid') || norm.includes('orderno')) map['order_id'] = col;
+        else if (norm.includes('price') || norm.includes('amount') || norm.includes('revenue')) map['order_amount'] = col;
+        else if (norm.includes('qty') || norm.includes('quantity') || norm.includes('stock')) map['stock'] = col;
+        return map;
+      }, {}),
+      confidences: cleanColumns.reduce((map, col) => {
+        map[col] = 0.95;
+        return map;
+      }, {}),
+      unmatchedHeaders: [],
+      needsConfirmation: false,
+      schemaProfile,
+    };
+
+    session.pendingPreview = {
+      isImage: true,
+      sheetPlans: [sheetPlan],
+      sheetSummary: [sheetPlan], // for compatibility
+      fileName: 'scanned_image.jpg',
+      extractedRows: cleanRows,
+      schemaProfile,
+      hostUrl,
+    };
+    session.awaitingUpload = false;
+    persistSession(session);
+
+    // Build LLM-driven preview response
+    const botReply = `📸 I've scanned your image and identified the table *"${sheetPlan.sheetName}"*\n\n` +
+      `🧬 *Dataset Type:* ${schemaProfile.datasetType.replace(/_/g, ' ').toUpperCase()} (Confidence: ${(schemaProfile.confidence * 100).toFixed(0)}%)\n` +
+      `📝 *Description:* ${schemaProfile.description}\n\n` +
+      `📊 *Columns Profiled:*\n` +
+      `• *Measures (Metrics):* ${schemaProfile.measures.join(', ') || 'none'}\n` +
+      `• *Dimensions (Filters/Groups):* ${schemaProfile.dimensions.join(', ') || 'none'}\n\n` +
+      `💾 *Should I store this data in your account?*\nReply *Yes* to save, or *No* to cancel.`;
+
+    session.history.push({ role: 'user', parts: [{ text: `[Sent Image]` }] });
+    session.history.push({ role: 'model', parts: [{ text: botReply }] });
+    persistSession(session);
+
+    await sendMessage(waId, botReply);
+
+  } catch (err) {
+    console.error('WA-Meta image scan error:', err.message);
+    await sendMessage(waId, `❌ Error scanning image: ${err.message}`);
+  }
+}
+
+// ─── Handle Excel file attachment ────────────────────────────────────────
+async function handleFileMessage(waId, mediaId, filename, hostUrl) {
+  const session = await getSessionByPhone(waId);
+  await sendMessage(waId, '📥 Got your file! Scanning it now...');
+
+  const buffer = await downloadMedia(mediaId);
+  if (!buffer) {
+    await sendMessage(waId, '❌ Could not download the file. Please try again.');
+    return;
+  }
+
+  const ext = path.extname(filename || '').toLowerCase() || '.xlsx';
+  if (!['.xlsx', '.xls', '.csv'].includes(ext)) {
+    await sendMessage(waId, `❌ Please send an Excel (.xlsx or .csv) file, not ${ext}.`);
+    return;
+  }
+
+  try {
+    const XLSX = require('xlsx');
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
+    const rawRows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+
+    const plan = detectSheetsAndColumns(buffer);
+    const knownSheets = plan.sheets;
+
+    if (knownSheets.length === 0 || rawRows.length === 0) {
+      await sendMessage(waId, `❌ Couldn't read data from this file.\n\nMake sure your spreadsheet has clear columns and rows.`);
+      return;
+    }
+
+    const firstSheetPlan = knownSheets[0];
+    const rawColumns = firstSheetPlan.headers;
+
+    // Normalization FIRST
+    const { columns: cleanColumns, rows: cleanRows } = normalizeAndValidateTable(rawColumns, rawRows);
+
+    // Schema Inference (LLM)
+    console.log(`🤖 [Schema] Inferring dynamic schema profile for Excel file...`);
+    const schemaProfile = await intelligence.inferDatasetSchema(filename, cleanColumns, cleanRows);
+
+    // Update sheet plan with cleaned columns and metadata
+    firstSheetPlan.headers = cleanColumns;
+    firstSheetPlan.columns = cleanColumns;
+    firstSheetPlan.rowCount = cleanRows.length;
+    firstSheetPlan.schemaProfile = schemaProfile;
+    firstSheetPlan.type = 'dataset';
+    firstSheetPlan.detectedConcepts = schemaProfile.entities || [];
+
+    session.pendingPreview = {
+      isImage: false,
+      sheetPlans: [firstSheetPlan],
+      sheetSummary: [firstSheetPlan],
+      fileName: filename,
+      extractedRows: cleanRows,
+      schemaProfile,
+      hostUrl,
+    };
+    session.awaitingUpload = false;
+    persistSession(session);
+
+    // Build LLM-driven preview response
+    const botReply = `📂 Scanned Excel *"${firstSheetPlan.sheetName}"*\n\n` +
+      `🧬 *Dataset Type:* ${schemaProfile.datasetType.replace(/_/g, ' ').toUpperCase()} (Confidence: ${(schemaProfile.confidence * 100).toFixed(0)}%)\n` +
+      `📝 *Description:* ${schemaProfile.description}\n\n` +
+      `📊 *Columns Profiled:*\n` +
+      `• *Measures (Metrics):* ${schemaProfile.measures.join(', ') || 'none'}\n` +
+      `• *Dimensions (Filters/Groups):* ${schemaProfile.dimensions.join(', ') || 'none'}\n\n` +
+      `💾 *Should I store this data in your account?*\nReply *Yes* to save, or *No* to cancel.`;
+
+    session.history.push({ role: 'user', parts: [{ text: `[Sent Excel: ${filename}]` }] });
+    session.history.push({ role: 'model', parts: [{ text: botReply }] });
+    persistSession(session);
+
+    await sendMessage(waId, botReply);
+
+  } catch (err) {
+    console.error('Excel parse error:', err.message);
+    await sendMessage(waId, `❌ Error reading file: ${err.message}`);
+  }
+}
+
 // ─── Webhook handlers (registered in server.js) ──────────────────────────
 
 // GET /webhook — Meta verification challenge
@@ -553,7 +728,7 @@ async function handleWebhook(req, res) {
           } else if (msg.type === 'document') {
             await handleFileMessage(waId, msg.document?.id, msg.document?.filename, hostUrl);
           } else if (msg.type === 'image') {
-            await sendMessage(waId, `📸 Got your image! Send an Excel file (.xlsx) to store your business data.`);
+            await handleImageMessage(waId, msg.image?.id, hostUrl);
           } else {
             await sendMessage(waId, `👋 Send a text message or an Excel file (.xlsx) to get started!`);
           }

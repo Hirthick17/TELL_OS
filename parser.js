@@ -136,10 +136,47 @@ function parseExcel(buffer) {
   return result;
 }
 
+function normalizeAndValidateTable(columns, rows) {
+  // 1. Clean columns
+  const cleanColumns = columns
+    .map(col => String(col || '').trim().replace(/\r?\n|\r/g, ' ').replace(/\s+/g, ' '))
+    .filter(Boolean);
+  
+  // 2. Clean rows
+  const cleanRows = rows.map(row => {
+    const cleanRow = {};
+    cleanColumns.forEach(col => {
+      // Find matching key case-insensitively
+      const originalKey = Object.keys(row).find(k => k.toLowerCase().trim() === col.toLowerCase());
+      let val = originalKey !== undefined ? row[originalKey] : '';
+      
+      if (val === undefined || val === null) {
+        val = '';
+      } else if (typeof val === 'string') {
+        val = val.trim();
+        // Convert to number if it represents a clean numeric value and is not an ID/date/year
+        const clean = val.replace(/[\$,₹€£%]/g, '').replace(/,/g, '').trim();
+        const isId = /id|code|number|sku|roll|employee|phone|mobile|pin|zip|date|year/i.test(col);
+        
+        if (clean.length > 0 && !isNaN(Number(clean)) && !isId) {
+          val = Number(clean);
+        }
+      } else if (typeof val === 'number') {
+        // If it's already a number, keep it as is
+      }
+      cleanRow[col] = val;
+    });
+    return cleanRow;
+  });
+  
+  return { columns: cleanColumns, rows: cleanRows };
+}
+
 module.exports = {
   detectSheetsAndColumns,
   streamSheet,
   extractSamples,
   buildSheetMetadata,
   parseExcel,
+  normalizeAndValidateTable,
 };
