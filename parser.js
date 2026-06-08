@@ -1,57 +1,113 @@
-// parser.js - Excel auto-detection and data extraction
+// parser.js - Excel parsing for dataset-first storage
+// The parser reads workbook reality: sheets, headers, rows, samples. It does
+// not coerce rows into products/orders/inventory/payments.
+
 const XLSX = require('xlsx');
+const {
+  detectSheetColumns,
+  detectConcepts,
+  profileColumns,
+  detectSheetType,
+  typeFromSheetName,
+} = require('./column-detector');
 
-/**
- * Detects what type of data a sheet contains based on column headers.
- * Returns: 'products' | 'orders' | 'inventory' | 'payments' | 'unknown'
- */
-function detectSheetType(headers) {
-  const h = headers.map(x => String(x).toLowerCase().replace(/[\s_-]/g, ''));
+const BATCH_SIZE = 200;
 
-  const scores = {
-    products: 0,
-    orders: 0,
-    inventory: 0,
-    payments: 0,
-  };
-
-  // Product signals
-  if (h.some(x => x.includes('product') || x.includes('item') || x === 'name')) scores.products += 2;
-  if (h.some(x => x.includes('price') || x.includes('unitprice') || x.includes('cost'))) scores.products += 2;
-  if (h.some(x => x.includes('category') || x.includes('sku') || x.includes('brand'))) scores.products += 2;
-  if (h.some(x => x.includes('description'))) scores.products += 1;
-
-  // Order signals
-  if (h.some(x => x.includes('orderid') || x.includes('orderno') || x === 'order')) scores.orders += 3;
-  if (h.some(x => x.includes('customer') || x.includes('buyer'))) scores.orders += 2;
-  if (h.some(x => x.includes('quantity') || x.includes('qty'))) scores.orders += 1;
-  if (h.some(x => x.includes('status') && !x.includes('payment'))) scores.orders += 1;
-  if (h.some(x => x.includes('orderdate') || x.includes('date') || x.includes('ordered'))) scores.orders += 1;
-
-  // Inventory signals
-  if (h.some(x => x.includes('stock') || x.includes('inventory') || x.includes('onhand'))) scores.inventory += 3;
-  if (h.some(x => x.includes('reorder') || x.includes('reorderlevel'))) scores.inventory += 2;
-  if (h.some(x => x.includes('warehouse') || x.includes('location') || x.includes('shelf'))) scores.inventory += 2;
-  if (h.some(x => x.includes('sku'))) scores.inventory += 1;
-
-  // Payment signals
-  if (h.some(x => x.includes('paymentid') || x === 'payment' || x.includes('transactionid'))) scores.payments += 3;
-  if (h.some(x => x.includes('paymentmethod') || x.includes('method') || x.includes('gateway'))) scores.payments += 2;
-  if (h.some(x => x.includes('paymentstatus') || (x.includes('status') && x.includes('pay')))) scores.payments += 2;
-  if (h.some(x => x.includes('paymentdate') || x.includes('paidon'))) scores.payments += 1;
-  if (h.some(x => x.includes('amount') || x.includes('total'))) scores.payments += 1;
-
-  // Pick highest score
-  const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
-  if (best[1] === 0) return 'unknown';
-  return best[0];
+function readHeaderRow(sheet) {
+  const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
+  const headers = [];
+  for (let col = range.s.c; col <= range.e.c; col++) {
+    const cellAddr = XLSX.utils.encode_cell({ r: range.s.r, c: col });
+    const cell = sheet[cellAddr];
+    if (cell && cell.v !== undefined && cell.v !== '') headers.push(String(cell.v));
+  }
+  return { headers, rowCount: Math.max(0, range.e.r - range.s.r) };
 }
 
-/**
- * Parse an Excel buffer and return categorized data.
- */
+function detectSheetsAndColumns(buffer) {
+  const workbook = XLSX.read(buffer, { type: 'buffer', sheetStubs: true });
+  const sheets = [];
+
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) continue;
+
+    const { headers, rowCount } = readHeaderRow(sheet);
+    if (headers.length === 0) continue;
+
+    const detection = detectSheetColumns(headers);
+    const detectedConcepts = detectConcepts([sheetName, ...headers]);
+
+    const inferredType = typeFromSheetName(sheetName) || detectSheetType(detection.columnMap).type;
+    const finalType = (inferredType && inferredType !== 'unknown') ? inferredType : 'dataset';
+
+    sheets.push({
+      sheetName,
+      type: finalType,
+      headers,
+      columns: headers,
+      rowCount,
+      detectedConcepts,
+      columnMap: detection.columnMap,
+      confidences: detection.confidences,
+      unmatchedHeaders: detection.unmatchedHeaders,
+      needsConfirmation: false,
+    });
+  }
+
+  return {
+    sheets,
+    totalRows: sheets.reduce((sum, s) => sum + s.rowCount, 0),
+    columns: [...new Set(sheets.flatMap(s => s.headers))],
+    detectedConcepts: [...new Set(sheets.flatMap(s => s.detectedConcepts || []))],
+    needsConfirmation: false,
+  };
+}
+
+async function streamSheet(buffer, sheetName, onBatch) {
+  const workbook = XLSX.read(buffer, { type: 'buffer', dense: true });
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) throw new Error(`Sheet "${sheetName}" not found`);
+
+  const allRows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+  let batchIndex = 0;
+  for (let offset = 0; offset < allRows.length; offset += BATCH_SIZE) {
+    const batch = allRows.slice(offset, offset + BATCH_SIZE);
+    await onBatch(batch, batchIndex++, offset + 1);
+  }
+
+  return { totalRows: allRows.length, batches: batchIndex };
+}
+
+function extractSamples(rows, columnMap, n = 3) {
+  const samples = {};
+  for (const [field, originalHeader] of Object.entries(columnMap || {})) {
+    samples[field] = rows
+      .slice(0, n)
+      .map(r => r[originalHeader])
+      .filter(v => v !== '' && v !== null && v !== undefined);
+  }
+  return samples;
+}
+
+function buildSheetMetadata(sheetPlan, sampleRows = []) {
+  return {
+    sheetName: sheetPlan.sheetName,
+    rowCount: sheetPlan.rowCount,
+    columns: sheetPlan.headers,
+    detectedConcepts: sheetPlan.detectedConcepts || [],
+    columnProfiles: profileColumns(sheetPlan.headers, sampleRows),
+    semanticHints: {
+      columnMap: sheetPlan.columnMap || {},
+      confidences: sheetPlan.confidences || {},
+      unmatchedHeaders: sheetPlan.unmatchedHeaders || [],
+    },
+  };
+}
+
 function parseExcel(buffer) {
   const workbook = XLSX.read(buffer, { type: 'buffer' });
+  const plan = detectSheetsAndColumns(buffer);
   const result = {
     products: [],
     orders: [],
@@ -61,35 +117,29 @@ function parseExcel(buffer) {
     sheetSummary: [],
   };
 
-  for (const sheetName of workbook.SheetNames) {
-    const sheet = workbook.Sheets[sheetName];
+  for (const sheetPlan of plan.sheets) {
+    const sheet = workbook.Sheets[sheetPlan.sheetName];
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-
-    if (rows.length === 0) continue;
-
-    const headers = Object.keys(rows[0]);
-    
-    // Also check sheet name for hints
-    const sn = sheetName.toLowerCase();
-    let type;
-    if (sn.includes('product')) type = 'products';
-    else if (sn.includes('order')) type = 'orders';
-    else if (sn.includes('inventory') || sn.includes('stock')) type = 'inventory';
-    else if (sn.includes('payment') || sn.includes('transaction')) type = 'payments';
-    else type = detectSheetType(headers);
-
-    result[type] = result[type] || [];
-    result[type].push(...rows);
-
+    result.unknown.push(...rows);
     result.sheetSummary.push({
-      sheetName,
-      type,
+      sheetName: sheetPlan.sheetName,
+      type: 'dataset',
       rowCount: rows.length,
-      headers,
+      headers: sheetPlan.headers,
+      detectedConcepts: sheetPlan.detectedConcepts,
+      columnMap: sheetPlan.columnMap,
+      confidences: sheetPlan.confidences,
+      unmatchedHeaders: sheetPlan.unmatchedHeaders,
     });
   }
 
   return result;
 }
 
-module.exports = { parseExcel, detectSheetType };
+module.exports = {
+  detectSheetsAndColumns,
+  streamSheet,
+  extractSamples,
+  buildSheetMetadata,
+  parseExcel,
+};

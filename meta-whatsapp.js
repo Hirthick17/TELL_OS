@@ -5,10 +5,27 @@
 require('dotenv').config();
 const axios                  = require('axios');
 const path                   = require('path');
-const { parseExcel }         = require('./parser');
+const { parseExcel, streamSheet, extractSamples, buildSheetMetadata } = require('./parser');
 const db                     = require('./db');
-const { chat }               = require('./llm');
-const { getSessionByPhone, persistSession } = require('./sessions'); // ← phone-keyed, MongoDB-backed
+const { chat, friendlyLLMError } = require('./llm');
+const { getSessionByPhone, persistSession } = require('./sessions');
+const intelligence           = require('./intelligence');
+const {
+  routePathway,
+  resolveAnalyticsIntent,
+  formatAnalyticsReply,
+} = require('./intent-router');
+const { classifyIntent } = require('./intent-classifier');
+const {
+  storeMissedIntent,
+  backfillCorrectIntent,
+} = require('./missed-intents');
+
+// ─── REMOVED: Old ERP INTENT_TO_QUERY mapping ───────────────────────────────
+// The system is now fully flexible and dataset-centric. No more hardcoded
+// product/order/inventory/payment queries. All analytics are driven by
+// dynamically detected dataset metadata and user questions.
+
 
 // ─── Config ───────────────────────────────────────────────────────────────
 const VERIFY_TOKEN    = process.env.META_VERIFY_TOKEN    || 'shopbot_verify_2024';
@@ -85,7 +102,7 @@ async function downloadMedia(mediaId) {
 }
 
 // ─── Handle Excel file attachment ────────────────────────────────────────
-async function handleFileMessage(waId, mediaId, filename) {
+async function handleFileMessage(waId, mediaId, filename, hostUrl) {
   const session = await getSessionByPhone(waId);
   await sendMessage(waId, '📥 Got your file! Scanning it now...');
 
@@ -105,21 +122,26 @@ async function handleFileMessage(waId, mediaId, filename) {
     const parsed = parseExcel(buffer);
     const lines  = [];
 
-    if (parsed.products.length  > 0) lines.push(`📦 *${parsed.products.length} Products* found`);
-    if (parsed.orders.length    > 0) lines.push(`🛒 *${parsed.orders.length} Orders* found`);
-    if (parsed.inventory.length > 0) lines.push(`🏪 *${parsed.inventory.length} Inventory items* found`);
-    if (parsed.payments.length  > 0) lines.push(`💳 *${parsed.payments.length} Payment records* found`);
+    // New parser stores everything in sheetSummary, not in typed arrays
+    for (const sheet of parsed.sheetSummary) {
+      const EMOJI = { orders: '🛒', products: '📦', inventory: '🏪', payments: '💳', dataset: '📄' };
+      const emoji = EMOJI[sheet.type] || '📄';
+      lines.push(`${emoji} *${sheet.rowCount} rows* in "${sheet.sheetName}"`);
+    }
 
-    if (lines.length === 0) {
-      await sendMessage(waId,
-        `❌ No readable data in "${filename}".\n\n` +
-        `Column labels needed:\n• Product Name, Price, SKU\n• Order ID, Customer Name\n• Stock, Reorder Level\n\nSend a corrected file!`
-      );
+    if (lines.length === 0 || parsed.sheetSummary.every(s => s.rowCount === 0)) {
+      await sendMessage(waId, '❌ No readable data...');
       return;
     }
 
-    session.pendingPreview = { products: parsed.products, orders: parsed.orders,
-      inventory: parsed.inventory, payments: parsed.payments, fileName: filename };
+    session.pendingPreview = {
+      sheetSummary: parsed.sheetSummary,
+      rawRows: parsed.unknown,
+      fileName: filename,
+      fileBuffer: buffer.toString('base64'),
+      hostUrl: hostUrl,
+      products: [], orders: [], inventory: [], payments: [],
+    };
     session.awaitingUpload = false;
     persistSession(session);
 
@@ -144,68 +166,328 @@ async function handleFileMessage(waId, mediaId, filename) {
 }
 
 // ─── Handle text message ──────────────────────────────────────────────────
-async function handleTextMessage(waId, text) {
+async function handleTextMessage(waId, text, hostUrl) {
   const session = await getSessionByPhone(waId);
-  const lower   = text.toLowerCase();
 
-  // Stricter YES/NO — match whole words to avoid false triggers
-  // e.g. "ok sounds good" shouldn't accidentally confirm data storage
-  const YES = /\b(yes|store|save|confirm|proceed|sure|yeah|yep|ha|haan|okay)\b/i;
-  const NO  = /\b(no|cancel|nope|nahi|nah|stop)\b/i;
+  // Sync derived flags so Layer 1 gates work correctly
+  session.pendingConfirmation = !!session.pendingPreview;
+  if (session.pendingPreview || session.awaitingUpload) session.activeFlow = 'data_entry';
 
-  // ── User confirming pending data storage ──────────────────────────────
-  if (session.pendingPreview) {
-    if (YES.test(lower)) {
-      await sendMessage(waId, '⏳ Saving your data...');
-      try {
-        const p = session.pendingPreview;
-        if (p.products.length  > 0) await db.insertProducts(session.sessionId, p.products);
-        if (p.orders.length    > 0) await db.insertOrders(session.sessionId, p.orders);
-        if (p.inventory.length > 0) await db.insertInventory(session.sessionId, p.inventory);
-        if (p.payments.length  > 0) await db.insertPayments(session.sessionId, p.payments);
+  // ── STEP 1: Hard safety + onboarding gates (fast, no LLM) ────────────
+  const pathway = await routePathway(text, session);
+  console.log(`🧭 [WA] Route: ${pathway.route} (confident=${pathway.confident}) | ${waId}`);
 
-        const stats      = await db.getStats(session.sessionId);
-        const dashUrl    = `${PUBLIC_URL}/dashboard/${session.sessionId}`;
-        session.pendingPreview = null;
-        session.uploadDone     = true;
+  // ── SAFETY BLOCK ─────────────────────────────────────────
+  if (pathway.route === 'safety_block') {
+    return sendMessage(waId, `⚠️ That action isn't available through chat. Please contact support if you need to reset your data.`);
+  }
 
-        const reply =
-          `🎉 All saved!\n\n📊 *Live Dashboard:*\n${dashUrl}\n\n` +
-          `📦 ${stats.products} products  🛒 ${stats.orders} orders\n` +
-          `🏪 ${stats.inventory} inventory  💳 ${stats.payments} payments\n\n` +
-          `Dashboard auto-refreshes every 10s! 🚀`;
-
-        session.history.push({ role: 'user',  parts: [{ text }] });
-        session.history.push({ role: 'model', parts: [{ text: reply }] });
-        persistSession(session);
-        await sendMessage(waId, reply);
-      } catch (err) {
-        await sendMessage(waId, `❌ Error saving: ${err.message}`);
-      }
-      return;
-    }
-
-    if (NO.test(lower)) {
-      session.pendingPreview = null;
-      const reply = `No problem! 😊 Upload a different file or let me know how I can help.`;
-      session.history.push({ role: 'user',  parts: [{ text }] });
+  // ── ONBOARDING (help request/greetings) ───────────────────────────────
+  if (pathway.route === 'onboarding') {
+    const ctx = session.uploadDone
+      ? `[Context: Data uploaded. Dashboard: ${PUBLIC_URL}/dashboard/${session.sessionId}. Explain analytics features.]`
+      : `[Context: User asking for help. Explain ShopBot — Excel upload, live dashboard, AI analytics.]`;
+    try {
+      session.history.push({ role: 'user', parts: [{ text }] });
+      const reply = await chat(text, session.history.slice(0, -1), ctx);
       session.history.push({ role: 'model', parts: [{ text: reply }] });
       persistSession(session);
-      await sendMessage(waId, reply);
-      return;
+      return sendMessage(waId, reply);
+    } catch (err) {
+      return sendMessage(waId, friendlyLLMError(err));
     }
   }
 
-  // ── Service activation ────────────────────────────────────────────────
+  // ── STEP 2: Gemini JSON intent classifier ─────────────────────────────
+  const skipClassifier = pathway.route !== 'pass_to_classifier';
+  let classification;
+
+  if (skipClassifier) {
+    classification = {
+      intent:           pathway.route === 'data_analytics' ? 'DATA_ANALYTICS' : 'DATA_INGESTION',
+      confidence:       0.95,
+      signals_detected: ['active_flow_in_progress'],
+      conflict:         false,
+      conflict_note:    '',
+      route:            pathway.route,
+      fallback_used:    true,
+      raw_response:     '',
+    };
+  } else {
+    classification = await classifyIntent(text, {}, session);
+    console.log(`🎯 [WA] Classified: ${classification.intent} (${classification.confidence.toFixed(2)}) fallback=${classification.fallback_used} | ${waId}`);
+  }
+
+  // ── STEP 3: Threshold gate ─────────────────────────────────────────────
+  if (classification.fallback_used && classification.route !== 'clarification') {
+    classification.confidence = 0.85; // treat fallback route as high-confidence
+  }
+
+  const { intent, confidence, conflict } = classification;
+  const THRESHOLD_ROUTE  = 0.80;
+  const THRESHOLD_LOG    = 0.65;
+
+  // Conflict → always clarification regardless of confidence
+  if (conflict && !skipClassifier) {
+    const clarifyReply = `🤔 I see two possible things you need — ${classification.conflict_note || 'your request had mixed signals'}\n\nCould you clarify?\n📊 If you want to *see* your data — ask "show my revenue" or "what's my stock"\n📂 If you want to *update* data — say "fix the price" or "upload new file"`;
+    session.history.push({ role: 'user',  parts: [{ text }] });
+    session.history.push({ role: 'model', parts: [{ text: clarifyReply }] });
+    persistSession(session);
+    storeMissedIntent({
+      message_text:     text,
+      message_metadata: { source: 'whatsapp' },
+      returned_intent:  intent,
+      confidence,
+      signals_detected: classification.signals_detected,
+      conflict:         true,
+      conflict_note:    classification.conflict_note,
+      session_snapshot: { upload_done: !!session.uploadDone, active_flow: session.activeFlow, last_intent: session.lastClassifiedIntent, merchant_id: session.sessionId },
+      reason:           'conflict',
+    }).catch(() => {});
+    return sendMessage(waId, clarifyReply);
+  }
+
+  // Low confidence → clarification + log
+  if (confidence < THRESHOLD_LOG && !skipClassifier) {
+    const clarifyReply = `I didn't quite catch that. Did you want to:\n\n*1.* 📊 Check your analytics — orders, stock, revenue\n*2.* 📂 Upload or update your data\n*3.* ❓ Something else\n\nJust reply with a number or rephrase your question!`;
+    session.history.push({ role: 'user',  parts: [{ text }] });
+    session.history.push({ role: 'model', parts: [{ text: clarifyReply }] });
+    persistSession(session);
+    storeMissedIntent({
+      message_text:     text,
+      message_metadata: { source: 'whatsapp' },
+      returned_intent:  intent,
+      confidence,
+      signals_detected: classification.signals_detected,
+      conflict:         false,
+      conflict_note:    '',
+      session_snapshot: { upload_done: !!session.uploadDone, active_flow: session.activeFlow, last_intent: session.lastClassifiedIntent, merchant_id: session.sessionId },
+      reason:           'low_confidence',
+    }).catch(() => {});
+    return sendMessage(waId, clarifyReply);
+  }
+
+  // Medium confidence (0.65–0.79) → route but log for review
+  if (confidence < THRESHOLD_ROUTE && !skipClassifier) {
+    storeMissedIntent({
+      message_text:     text,
+      message_metadata: { source: 'whatsapp' },
+      returned_intent:  intent,
+      confidence,
+      signals_detected: classification.signals_detected,
+      conflict:         false,
+      conflict_note:    '',
+      session_snapshot: { upload_done: !!session.uploadDone, active_flow: session.activeFlow, last_intent: session.lastClassifiedIntent, merchant_id: session.sessionId },
+      reason:           'medium_confidence',
+    }).catch(() => {});
+  }
+
+  // High confidence → backfill any previous unresolved intent for this session
+  if (confidence >= THRESHOLD_ROUTE && !skipClassifier && session.lastClassifiedIntent) {
+    backfillCorrectIntent(session.sessionId, intent, text).catch(() => {});
+  }
+
+  // Update session with this classification
+  session.lastClassifiedIntent = intent;
+  session.lastRoute             = classification.route;
+  session.activeFlow            = classification.route === 'data_analytics' ? 'data_analytics' : 'data_entry';
+  session.recentRoutes          = [...(session.recentRoutes || []).slice(-4), classification.route];
+
+  // ── STEP 4: Route to the correct pathway ──────────────────────────────
+  const effectiveRoute = classification.route;
+
+  if (effectiveRoute === 'clarification') {
+    const clarifyReply = `I couldn't quite understand that. Could you try rephrasing?`;
+    session.history.push({ role: 'user',  parts: [{ text }] });
+    session.history.push({ role: 'model', parts: [{ text: clarifyReply }] });
+    persistSession(session);
+    return sendMessage(waId, clarifyReply);
+  }
+
+  if (effectiveRoute === 'data_analytics') {
+    // NEW: Flexible analytics pathway - with Query Planner execution
+    const metaCtx = await db.buildLLMContext(session.sessionId).catch(() => null);
+    const stats = await db.getStats(session.sessionId).catch(() => null);
+    const datasetId = stats?.latestDatasetId;
+    let queryResult = null;
+    let queryPlan = null;
+    let executed = false;
+
+    if (datasetId) {
+      const db_conn = await db.connect();
+      const metadata = await db_conn.collection('dataset_metadata').findOne({ datasetId }).catch(() => null);
+      if (metadata) {
+        try {
+          queryPlan = await intelligence.buildQueryPlan(text, datasetId, metadata);
+          if (queryPlan && queryPlan.operation === 'aggregate' && queryPlan.field) {
+            queryResult = await db.executeQueryPlan(session.sessionId, datasetId, queryPlan);
+            executed = true;
+          }
+        } catch (planErr) {
+          console.warn('[WA] Intelligence query execution failed:', planErr.message);
+        }
+      }
+    }
+
+    let responseContext = `[Context: You are ShopBot, a WhatsApp commerce assistant. The user asked: "${text}".`;
+    if (executed && queryResult) {
+      responseContext += ` We ran a database query plan: ${JSON.stringify(queryPlan)} and got the results: ${JSON.stringify(queryResult)}.`;
+      responseContext += ` Formulate a concise, friendly WhatsApp reply (short, with emojis) presenting this exact database result to the user.`;
+    } else {
+      responseContext += metaCtx 
+        ? ` Answer their analytics question DIRECTLY using the data context below:\n\nAvailable Merchant Datasets:\n${metaCtx}`
+        : ` Answer their analytics question based on the actual data structure, not assumptions.`;
+    }
+    responseContext += ` Be concise and WhatsApp-friendly (short, use emojis, no markdown). Never assume business categories or ERP structures. Answer based on what's actually in the query plan or data.]`;
+
+    try {
+      session.history.push({ role: 'user', parts: [{ text }] });
+      const reply = await chat(text, session.history.slice(0, -1), responseContext);
+      session.history.push({ role: 'model', parts: [{ text: reply }] });
+      persistSession(session);
+      console.log(`📊 [WA] Flexible Analytics: ${waId}`);
+      return sendMessage(waId, reply);
+    } catch (err) {
+      return sendMessage(waId, friendlyLLMError(err));
+    }
+  }
+
+  // ── DATA ENTRY PATHWAY (original flow, preserved) ─────────────────
+  const lower = text.toLowerCase();
+  const YES = /\b(yes|store|save|confirm|proceed|sure|yeah|yep|ha|haan|okay)\b/i;
+  const NO  = /\b(no|cancel|nope|nahi|nah|stop)\b/i;
+
+  if (NO.test(lower)) {
+    session.pendingPreview      = null;
+    session.pendingConfirmation = false;
+    const reply = `No problem! 😊 Upload a different file or let me know how I can help.`;
+    session.history.push({ role: 'user',  parts: [{ text }] });
+    session.history.push({ role: 'model', parts: [{ text: reply }] });
+    persistSession(session);
+    return sendMessage(waId, reply);
+  }
+
+  // YES handler for pending file confirmation → save using new dataset flow
+  if (session.pendingPreview && YES.test(lower)) {
+    const p = session.pendingPreview;
+    try {
+      const fileBuffer = Buffer.from(p.fileBuffer, 'base64');
+      const knownSheets = p.sheetSummary.filter(s => s.type !== 'unknown');
+
+      const { datasetId } = await db.prepareUploadSession(
+        session.sessionId,
+        p.fileName,
+        knownSheets
+      );
+
+      const metaSheets = [];
+      let insertedTotal = 0;
+
+      for (const sheetPlan of knownSheets) {
+        let sheetRows = 0;
+        let firstBatchRows = null;
+
+        let startRow = 1;
+        await streamSheet(fileBuffer, sheetPlan.sheetName, async (batch) => {
+          await db.insertDatasetRecordsBatch(
+            session.sessionId,
+            datasetId,
+            sheetPlan.sheetName,
+            batch,
+            startRow
+          );
+          startRow += batch.length;
+          sheetRows += batch.length;
+          insertedTotal += batch.length;
+          if (!firstBatchRows) firstBatchRows = batch;
+        });
+
+        // Extract sample values from first batch for LLM context
+        const sampleValues = firstBatchRows
+          ? extractSamples(firstBatchRows, sheetPlan.columnMap, 3)
+          : {};
+
+        const sheetMeta = buildSheetMetadata(sheetPlan, firstBatchRows || []);
+
+        metaSheets.push({
+          sheetName:        sheetPlan.sheetName,
+          semanticType:     sheetPlan.type,
+          rowCount:         sheetRows,
+          columnMap:        sheetPlan.columnMap,
+          confidences:      sheetPlan.confidences,
+          unmatchedHeaders: sheetPlan.unmatchedHeaders,
+          sampleValues,
+          columns:          sheetMeta.columns,
+          detectedConcepts: sheetMeta.detectedConcepts,
+          columnProfiles:   sheetMeta.columnProfiles,
+        });
+      }
+
+      // Compute metadata and insights
+      const allColumns = [...new Set(metaSheets.flatMap(s => s.columns || Object.keys(s.columnMap || {})))];
+      const allConcepts = [...new Set(metaSheets.flatMap(s => s.detectedConcepts || []))];
+      const allProfiles = metaSheets.flatMap(s => s.columnProfiles || []);
+
+      const revenueSheet = metaSheets.find(s =>
+        s.columnMap?.order_amount || s.columnMap?.price
+      );
+      const insights = {
+        hasOrders:    metaSheets.some(s => s.columnMap?.order_id),
+        hasProducts:  metaSheets.some(s => s.columnMap?.product_name),
+        hasInventory: metaSheets.some(s => s.columnMap?.stock),
+        hasPayments:  metaSheets.some(s => s.columnMap?.payment_method),
+        totalRows:    insertedTotal,
+        primarySheet: metaSheets[0]?.sheetName || null,
+        revenueField: revenueSheet?.columnMap?.order_amount || revenueSheet?.columnMap?.price || null,
+      };
+
+      await db.saveDatasetMetadata(session.sessionId, datasetId, {
+        columns:          allColumns,
+        detectedConcepts: allConcepts,
+        columnProfiles:   allProfiles,
+        sheets:           metaSheets,
+      });
+
+      // Generate rich AI business insights using NVIDIA NIM Mixtral MoE
+      const sampleRows = metaSheets[0]?.sampleValues || {};
+      const aiInsights = await intelligence.generateDatasetInsights(p.fileName, allColumns, sampleRows).catch(() => ({}));
+
+      await db.saveDatasetInsights(session.sessionId, datasetId, {
+        ...insights,
+        aiInsights,
+      });
+      await db.updateDataset(datasetId, { rowCount: insertedTotal });
+
+      session.uploadDone = true;
+      session.pendingPreview = null;
+      session.pendingConfirmation = false;
+      session.activeFlow = null;
+
+      const currentHostUrl = p.hostUrl || hostUrl || PUBLIC_URL;
+      const dashboardUrl = `${currentHostUrl}/dashboard/${session.sessionId}`;
+      const reply = `🎉 Done! ${insertedTotal} rows saved across ${metaSheets.length} sheet(s).\n\n📊 Your live dashboard:\n${dashboardUrl}`;
+      
+      session.history.push({ role: 'model', parts: [{ text: reply }] });
+      persistSession(session);
+      return sendMessage(waId, reply);
+
+    } catch (err) {
+      console.error('WhatsApp save error:', err.message);
+      return sendMessage(waId, `❌ Could not save data: ${err.message}`);
+    }
+  }
+
+  // Service activation confirmation (legacy path for already uploaded data)
   if (session.uploadDone && YES.test(lower)) {
     session.confirmed = true;
     await db.confirmSession(session.sessionId).catch(() => {});
   }
 
-  // ── Regular Gemini chat ───────────────────────────────────────────────
+  // Regular Gemini chat (data entry / onboarding)
   let contextNote = '';
   if (session.uploadDone) {
-    contextNote = `[Context: Data already stored. Dashboard: ${PUBLIC_URL}/dashboard/${session.sessionId}. Do NOT ask them to upload again.]`;
+    const currentHostUrl = hostUrl || PUBLIC_URL;
+    contextNote = `[Context: Data already stored. Dashboard: ${currentHostUrl}/dashboard/${session.sessionId}. Do NOT ask them to upload again.]`;
   } else if (session.awaitingUpload) {
     contextNote = '[Context: Already asked user to send Excel file. Gently remind them to attach .xlsx file.]';
   } else if (session.pendingPreview) {
@@ -213,10 +495,8 @@ async function handleTextMessage(waId, text) {
   }
 
   try {
-    // Push user message to history BEFORE calling Gemini so context is correct
     session.history.push({ role: 'user', parts: [{ text }] });
-
-    const reply = await chat(text, session.history.slice(0, -1), contextNote); // pass history without last user msg (chat() appends it)
+    const reply = await chat(text, session.history.slice(0, -1), contextNote);
     session.history.push({ role: 'model', parts: [{ text: reply }] });
 
     if (/upload|excel|xlsx|file|attach|spreadsheet/i.test(reply)) {
@@ -228,7 +508,7 @@ async function handleTextMessage(waId, text) {
     await sendMessage(waId, reply);
   } catch (err) {
     console.error('Meta LLM error:', err.message);
-    await sendMessage(waId, `❌ ${err.message}`);
+    return sendMessage(waId, friendlyLLMError(err));
   }
 }
 
@@ -254,6 +534,10 @@ async function handleWebhook(req, res) {
 
   if (body.object !== 'whatsapp_business_account') return;
 
+  const hostUrl = (req.get('host').includes('localhost') || req.get('host').includes('127.0.0.1'))
+    ? `http://${req.get('host')}`
+    : (process.env.PUBLIC_URL || `https://${req.get('host')}`);
+
   for (const entry of (body.entry || [])) {
     for (const change of (entry.changes || [])) {
       const msgs = change.value?.messages;
@@ -265,9 +549,9 @@ async function handleWebhook(req, res) {
 
         try {
           if (msg.type === 'text') {
-            await handleTextMessage(waId, msg.text?.body?.trim());
+            await handleTextMessage(waId, msg.text?.body?.trim(), hostUrl);
           } else if (msg.type === 'document') {
-            await handleFileMessage(waId, msg.document?.id, msg.document?.filename);
+            await handleFileMessage(waId, msg.document?.id, msg.document?.filename, hostUrl);
           } else if (msg.type === 'image') {
             await sendMessage(waId, `📸 Got your image! Send an Excel file (.xlsx) to store your business data.`);
           } else {

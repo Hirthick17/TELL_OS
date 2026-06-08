@@ -586,6 +586,11 @@ async function sendMsg() {
       dashboardUrl: data.dashboardUrl || null,
     });
 
+    // P3: If server started async streaming insert, poll for completion
+    if (data.processing) {
+      startUploadPolling();
+    }
+
   } catch (err) {
     setTyping(false);
     setBusy(false);
@@ -686,11 +691,59 @@ function resize(el) {
   el.style.height = Math.min(el.scrollHeight, 120) + 'px';
 }
 
+// ── P3: Poll upload completion status ──────────────────────
+// Polls /api/upload-status/:sessionId every 1.5s after async insert starts.
+// Shows live row progress in status bar, then the done message+dashboard card.
+let _uploadPollTimer = null;
+
+function startUploadPolling() {
+  if (_uploadPollTimer) return; // already polling
+  document.getElementById('bot-status').textContent = 'processing data...';
+
+  _uploadPollTimer = setInterval(async () => {
+    try {
+      const res  = await fetch('/api/upload-status/' + SESSION_ID);
+      const data = await res.json();
+
+      if (data.status === 'done') {
+        clearInterval(_uploadPollTimer);
+        _uploadPollTimer = null;
+        document.getElementById('bot-status').textContent = 'online';
+
+        // Fetch latest session messages — the done notification is there
+        const msgRes  = await fetch('/session/' + SESSION_ID + '/messages');
+        const msgData = await msgRes.json();
+        if (msgData.messages && msgData.messages.length > 0) {
+          // Render the last bot message (has the dashboard card)
+          const lastBot = [...msgData.messages].reverse().find(m => m.role === 'bot' && m.dashboardUrl);
+          if (lastBot) {
+            renderMessage(lastBot);
+          } else {
+            const lastMsg = [...msgData.messages].reverse().find(m => m.role === 'bot');
+            if (lastMsg) renderMessage(lastMsg);
+          }
+        }
+
+      } else if (data.status === 'error') {
+        clearInterval(_uploadPollTimer);
+        _uploadPollTimer = null;
+        document.getElementById('bot-status').textContent = 'online';
+        renderMessage({ role: 'bot', text: '❌ Data save failed: ' + (data.error || 'unknown error. Please try again.') });
+
+      } else if (data.status === 'processing' && data.total > 0) {
+        // Live row count in the header status bar
+        const pct = Math.round((data.inserted / data.total) * 100);
+        document.getElementById('bot-status').textContent = `saving... ${data.inserted}/${data.total} rows (${pct}%)`;
+      }
+    } catch (_) {} // polling must never crash
+  }, 1500);
+}
+
 // ── Restore session messages from server ──────────────────
 async function restoreSession() {
   try {
     const res = await fetch('/session/' + SESSION_ID + '/messages');
-    if (!res.ok) return;
+    if (!res.ok) return false;
     const data = await res.json();
     if (data.messages && data.messages.length > 0) {
       data.messages.forEach(msg => renderMessage(msg));
@@ -705,11 +758,21 @@ async function init() {
   setBusy(true);
   setTyping(true);
 
-  // Try to restore previous session first
+  // Restore previous session first
   const restored = await restoreSession();
   if (restored) {
     setTyping(false);
     setBusy(false);
+
+    // Resume polling if a page refresh happened mid-upload
+    try {
+      const statusRes  = await fetch('/api/upload-status/' + SESSION_ID);
+      const statusData = await statusRes.json();
+      if (statusData.status === 'processing') {
+        renderMessage({ role: 'bot', text: '⏳ Your previous upload is still being saved. I\'ll let you know when it\'s done!' });
+        startUploadPolling();
+      }
+    } catch (_) {}
     return;
   }
 

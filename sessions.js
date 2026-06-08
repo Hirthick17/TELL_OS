@@ -22,6 +22,11 @@ function defaultSession(sessionId, phoneNumber = null, channel = 'web') {
     pendingPreview: null,       // Parsed Excel data awaiting confirmation
     createdAt:      new Date(),
     updatedAt:      new Date(),
+    // ── Intent router state ──────────────────────────────────────────────
+    recentRoutes:        [],    // Last 5 routes (for Layer 3 context bias)
+    lastRoute:           null,  // Most recent route taken
+    activeFlow:          null,  // Current active flow: 'data_entry' | 'data_analytics'
+    pendingConfirmation: false, // true when awaiting a bare yes/no (Layer 1 gate)
   };
 }
 

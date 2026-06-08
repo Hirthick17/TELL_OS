@@ -28,6 +28,7 @@ async function run() {
 
   const checks = {
     GEMINI_API_KEY:    process.env.GEMINI_API_KEY,
+    NIM_KEY:           process.env.NIM_KEY,
     META_ACCESS_TOKEN: ACCESS_TOKEN,
     META_PHONE_NUMBER_ID: PHONE_NUMBER_ID,
     META_VERIFY_TOKEN: VERIFY_TOKEN,
