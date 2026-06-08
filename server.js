@@ -1560,6 +1560,61 @@ function renderDashboard(sessionId, stats, datasetsList, tableData) {
       color: var(--accent);
       background: rgba(37, 211, 102, 0.1);
     }
+    
+    /* ── Mobile Responsiveness ──────────────────────── */
+    @media (max-width: 768px) {
+      header {
+        padding: 12px 16px;
+        height: auto;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+      }
+      .live-badge {
+        align-self: flex-start;
+      }
+      .dashboard-layout {
+        flex-direction: column;
+        height: auto;
+        overflow: visible;
+      }
+      .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        padding: 16px;
+        overflow-y: visible;
+        max-height: 250px;
+      }
+      .main-panel {
+        padding: 16px;
+        overflow-y: visible;
+        gap: 16px;
+      }
+      .main-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+      }
+      .back-btn {
+        width: 100%;
+        justify-content: center;
+      }
+      .tab-nav {
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .tab-btn {
+        flex: 1;
+        padding: 8px 12px;
+        font-size: 0.85rem;
+        text-align: center;
+      }
+      .insights-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+    }
   </style>
 </head>
 <body>

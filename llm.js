@@ -122,7 +122,7 @@ async function chat(message, history = [], contextNote = '') {
     const response = await client.chat.completions.create({
       model: MODEL,
       messages: messages,
-      temperature: 0.7,
+      temperature: 0.1,
       max_tokens: 1024,
     });
     console.log("LLM response received");
