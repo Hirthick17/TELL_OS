@@ -5,7 +5,7 @@
 require('dotenv').config();
 const axios                  = require('axios');
 const path                   = require('path');
-const { parseExcel, streamSheet, extractSamples, buildSheetMetadata, normalizeAndValidateTable } = require('./parser');
+const { parseExcel, streamSheet, extractSamples, buildSheetMetadata, normalizeAndValidateTable, detectSheetsAndColumns } = require('./parser');
 const db                     = require('./db');
 const { chat, friendlyLLMError } = require('./llm');
 const { getSessionByPhone, persistSession } = require('./sessions');
@@ -101,69 +101,7 @@ async function downloadMedia(mediaId) {
   }
 }
 
-// ─── Handle Excel file attachment ────────────────────────────────────────
-async function handleFileMessage(waId, mediaId, filename, hostUrl) {
-  const session = await getSessionByPhone(waId);
-  await sendMessage(waId, '📥 Got your file! Scanning it now...');
-
-  const buffer = await downloadMedia(mediaId);
-  if (!buffer) {
-    await sendMessage(waId, '❌ Could not download the file. Please try again.');
-    return;
-  }
-
-  const ext = path.extname(filename || '').toLowerCase() || '.xlsx';
-  if (!['.xlsx', '.xls', '.csv'].includes(ext)) {
-    await sendMessage(waId, `❌ Please send an Excel (.xlsx or .csv) file, not ${ext}.`);
-    return;
-  }
-
-  try {
-    const parsed = parseExcel(buffer);
-    const lines  = [];
-
-    // New parser stores everything in sheetSummary, not in typed arrays
-    for (const sheet of parsed.sheetSummary) {
-      const EMOJI = { orders: '🛒', products: '📦', inventory: '🏪', payments: '💳', dataset: '📄' };
-      const emoji = EMOJI[sheet.type] || '📄';
-      lines.push(`${emoji} *${sheet.rowCount} rows* in "${sheet.sheetName}"`);
-    }
-
-    if (lines.length === 0 || parsed.sheetSummary.every(s => s.rowCount === 0)) {
-      await sendMessage(waId, '❌ No readable data...');
-      return;
-    }
-
-    session.pendingPreview = {
-      sheetSummary: parsed.sheetSummary,
-      rawRows: parsed.unknown,
-      fileName: filename,
-      fileBuffer: buffer.toString('base64'),
-      hostUrl: hostUrl,
-      products: [], orders: [], inventory: [], payments: [],
-    };
-    session.awaitingUpload = false;
-    persistSession(session);
-
-    const sheetInfo = parsed.sheetSummary
-      .map(s => `  • ${s.sheetName} → ${s.type} (${s.rowCount} rows)`)
-      .join('\n');
-
-    const reply =
-      `✅ Scanned *${filename}*\n\n` +
-      `Found:\n${lines.join('\n')}\n\n` +
-      `📋 Sheets:\n${sheetInfo}\n\n` +
-      `💾 *Should I store this in your account?*\nReply *Yes* to save, *No* to cancel.`;
-
-    session.history.push({ role: 'user',  parts: [{ text: `[Sent Excel: ${filename}]` }] });
-    session.history.push({ role: 'model', parts: [{ text: reply }] });
-    await sendMessage(waId, reply);
-
-  } catch (err) {
-    console.error('Excel parse error:', err.message);
-    await sendMessage(waId, `❌ Error reading file: ${err.message}`);
-  }
-}
+// (Removed duplicate outdated handleFileMessage implementation. The active implementation is further down.)
 
 // ─── Handle text message ──────────────────────────────────────────────────
 async function handleTextMessage(waId, text, hostUrl) {
