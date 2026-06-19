@@ -70,7 +70,7 @@ async function storeMissedIntent(data) {
 async function backfillCorrectIntent(sessionId, correctIntent, merchantResponse) {
   try {
     const db = await connect();
-    const result = await db.collection(COLLECTION).updateOne(
+    const result = await db.collection(COLLECTION).findOneAndUpdate(
       {
         'session_snapshot.merchant_id': sessionId,
         correct_intent: null,
@@ -83,9 +83,12 @@ async function backfillCorrectIntent(sessionId, correctIntent, merchantResponse)
           backfilled_at:     new Date(),
         },
       },
-      { sort: { created_at: -1 } }   // most recent unresolved first
+      {
+        sort: { created_at: -1 },
+        returnDocument: 'after'
+      }
     );
-    if (result.modifiedCount > 0) {
+    if (result) {
       console.log(`✅ Backfilled correct_intent=${correctIntent} for session ${sessionId.slice(0, 8)}`);
     }
   } catch (err) {

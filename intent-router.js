@@ -53,14 +53,14 @@ function isHelpRequest(message) {
  */
 function isSystemConfirmation(message, session) {
   const bare = /^\s*(yes|no|ok|okay|sure|nope|nah|cancel|yeah|yep)\s*$/i;
-  return bare.test(message) && session.pendingConfirmation === true;
+  return bare.test(message) && session && session.pendingConfirmation === true;
 }
 
 // ─── Simplified Main Router ────────────────────────────────────────────
 
 async function routePathway(message, session) {
   const tStart = Date.now();
-  trace.logFunctionEntered('intent-router.js', 'routePathway', { message, sessionKeys: Object.keys(session) }, 'server.js');
+  trace.logFunctionEntered('intent-router.js', 'routePathway', { message, sessionKeys: session ? Object.keys(session) : [] }, 'server.js');
 
   // ── Layer 1: Hard Gates (Always Win) ─────────────────────────────────
   
@@ -83,13 +83,13 @@ async function routePathway(message, session) {
   }
 
   if (isSystemConfirmation(message, session)) {
-    const route = session.activeFlow || 'data_entry';
+    const route = (session && session.activeFlow) || 'data_entry';
     const res = { route: route, confident: true, method: 'hard_gate' };
     trace.logFunctionResult('intent-router.js', 'routePathway', res, Date.now() - tStart);
     return res;
   }
 
-  if (!session.uploadDone) {
+  if (!session || !session.uploadDone) {
     const res = { route: 'data_entry', confident: true, method: 'hard_gate' };
     trace.logFunctionResult('intent-router.js', 'routePathway', res, Date.now() - tStart);
     return res;

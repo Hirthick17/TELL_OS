@@ -1,4 +1,4 @@
-// intent-classifier.js — Gemini-powered 5-intent JSON classifier for TELL OS
+// intent-classifier.js — Nemotron-9B (NVIDIA NIM) powered 5-intent JSON classifier for TELL OS
 //
 // Returns structured JSON with confidence score, signals, and conflict flag.
 // The existing routePathway() still runs first as a safety/help pre-filter.
@@ -10,13 +10,19 @@
 //   DATA_INGESTION — text-based correction/update/add of stored data
 //   DATA_ANALYTICS — question about business data
 //   CLARIFICATION  — too ambiguous to route confidently
+//
+// NOTE: Gemini 2.5 Flash is reserved for document schema inference & OCR (intelligence.js)
+// only — it runs at most once per file upload, staying well within the 20 req/day free quota.
 
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+// Reuse the shared NIM OpenAI-compatible client and Nemotron-9B model from llm.js.
+// This shares the same persistent keep-alive HTTPS agent to NVIDIA NIM.
+const { client, MODEL: NIM_MODEL } = require('./llm');
 const { isDangerous, isSystemConfirmation } = require('./intent-router');
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-// Use gemini-1.5-flash — reliable JSON mode support
-const CLASSIFIER_MODEL = 'gemini-2.5-flash';
+// ─── Model used for intent classification ─────────────────────────────────
+// Same model as conversational chat (nvidia/nemotron-nano-9b-v2).
+// Fast enough for per-message latency, no Gemini quota consumed.
+const CLASSIFIER_MODEL = NIM_MODEL;
 
 // ─── The classifier system prompt ─────────────────────────────────────────
 // Kept verbatim to the spec. Template variables are replaced before the call.
@@ -236,25 +242,16 @@ async function classifyIntent(message, messageMetadata = {}, session = {}) {
     return res;
   }
 
-  // ── Skip classifier when not configured ─────────────────────────────────
-  if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'your_gemini_api_key_here') {
-    const res = await _fallbackClassification(message, session, 'no_api_key');
+  // ── Skip classifier when NIM not configured ────────────────────────────────────────────
+  if (!process.env.NIM_KEY || process.env.NIM_KEY.startsWith('your_')) {
+    const res = await _fallbackClassification(message, session, 'no_nim_key');
     trace.logFunctionResult('intent-classifier.js', 'classifyIntent', res, Date.now() - tStart);
     return res;
   }
 
-  // ── Gemini JSON classification ───────────────────────────────────────────
+  // ── NVIDIA NIM (Nemotron-9B) JSON classification ──────────────────────────────────────────
   let rawResponse = '';
   try {
-    const model = genAI.getGenerativeModel({
-      model: CLASSIFIER_MODEL,
-      generationConfig: {
-        responseMimeType: 'application/json',
-        temperature:      0.0,    // fully deterministic
-        maxOutputTokens:  1024,    // JSON response needs headroom for signals array
-      },
-    });
-
     const sessionContext = {
       uploadDone:          !!session.uploadDone,
       activeFlow:          session.activeFlow        || session.lastRoute || 'none',
@@ -263,14 +260,26 @@ async function classifyIntent(message, messageMetadata = {}, session = {}) {
     };
 
     const prompt = buildPrompt(message, messageMetadata, sessionContext);
-    trace.logGeminiRequest(CLASSIFIER_MODEL, prompt, message, JSON.stringify(sessionContext));
-    trace.logDataTransfer('classifyIntent', 'model.generateContent', { promptLength: prompt.length });
-    
-    const result = await model.generateContent(prompt);
-    rawResponse  = result.response.text().trim();
-    
+    trace.logGeminiRequest(CLASSIFIER_MODEL, CLASSIFIER_PROMPT, message, JSON.stringify(sessionContext));
+    trace.logDataTransfer('classifyIntent', 'client.chat.completions.create', { promptLength: prompt.length });
+
+    const response = await client.chat.completions.create({
+      model: CLASSIFIER_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a strict JSON-only intent classifier. Respond ONLY with a valid JSON object matching the schema. No explanation, no markdown, no text outside the JSON.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.0,
+      max_tokens: 512,
+    });
+
+    rawResponse = response.choices[0].message.content.trim();
+
     const latency = Date.now() - tStart;
-    trace.logGeminiResponse(CLASSIFIER_MODEL, rawResponse, latency, prompt, message, JSON.stringify(sessionContext));
+    trace.logGeminiResponse(CLASSIFIER_MODEL, rawResponse, latency, CLASSIFIER_PROMPT, message, JSON.stringify(sessionContext));
 
     // Strip markdown code fences (```json ... ```) if present
     let cleaned = rawResponse
@@ -278,7 +287,7 @@ async function classifyIntent(message, messageMetadata = {}, session = {}) {
       .replace(/\s*```\s*$/i, '')
       .trim();
 
-    // If Gemini prefixed with text like "Here is the JSON:", extract the JSON object
+    // If model prefixed with text, extract the JSON object
     const jsonStart = cleaned.indexOf('{');
     const jsonEnd   = cleaned.lastIndexOf('}');
     if (jsonStart > 0 && jsonEnd > jsonStart) {
@@ -298,7 +307,7 @@ async function classifyIntent(message, messageMetadata = {}, session = {}) {
     return validated;
 
   } catch (err) {
-    trace.logError('classifyIntent', { message, messageMetadata }, err, 'Gemini classification flow');
+    trace.logError('classifyIntent', { message, messageMetadata }, err, 'NIM Nemotron-9B classification flow');
     console.error('⚠️  Intent classifier error:', err.message, '| raw:', rawResponse?.slice(0, 120));
     // Graceful fallback — never block the user
     const res = await _fallbackClassification(message, session, err.message);
@@ -306,6 +315,7 @@ async function classifyIntent(message, messageMetadata = {}, session = {}) {
     return res;
   }
 }
+
 
 // ─── Fallback: map routePathway() result to ClassificationResult ──────────
 async function _fallbackClassification(message, session, reason) {

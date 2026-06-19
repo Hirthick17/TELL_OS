@@ -1,453 +1,1933 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ShopBot — WhatsApp Ecommerce Assistant</title>
-  <meta name="description" content="Manage your ecommerce business through WhatsApp chat.">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Inter', sans-serif;
-      background: #111b21;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TellOs — Simple inventory help for small business sellers</title>
+<meta name="description" content="TellOs helps early-stage sellers on WhatsApp and Meesho manage stock, orders, and customers — without complex software." />
+<meta name="theme-color" content="#FFFFFF" />
 
-    /* ── Phone Frame ─────────────────────────────────── */
-    .phone {
-      width: 390px;
-      height: 844px;
-      background: #0b141a;
-      border-radius: 44px;
-      border: 2px solid #2a3942;
-      box-shadow: 0 40px 120px rgba(0,0,0,.8), 0 0 0 1px #1a2832;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
 
-    /* ── Status bar ──────────────────────────────────── */
-    .status-bar {
-      background: #1f2c34;
-      padding: 8px 20px 4px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 11px;
-      color: #aebac1;
-      flex-shrink: 0;
-    }
-    .status-time { font-weight: 600; }
+<style>
+  /* ════════════════════════════════════════════════════════════
+     RESET + ROOT
+  ════════════════════════════════════════════════════════════ */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #FFFFFF;
+    color: #2A3942;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  img { max-width: 100%; display: block; }
+  a { color: inherit; text-decoration: none; }
+  button { font-family: inherit; cursor: pointer; }
 
-    /* ── WhatsApp Header ─────────────────────────────── */
-    .wa-header {
-      background: #1f2c34;
-      padding: 10px 16px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      border-bottom: 1px solid #2a3942;
-      flex-shrink: 0;
-    }
-    .avatar {
-      width: 40px; height: 40px;
-      background: linear-gradient(135deg, #25d366, #128c7e);
-      border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 20px; flex-shrink: 0;
-    }
-    .contact-info { flex: 1; min-width: 0; }
-    .contact-name { font-size: 15px; font-weight: 600; color: #e9edef; }
-    .contact-status { font-size: 12px; color: #8696a0; margin-top: 1px; }
-    .header-icons { display: flex; gap: 16px; color: #8696a0; font-size: 18px; }
-    .header-icons span { cursor: pointer; }
+  :root {
+    --bg: #FFFFFF;
+    --bg-soft: #F4F6F8;
+    --bg-mid: #ECEFF1;
+    --ink-1: #1F2C34;
+    --ink-2: #2A3942;
+    --text-1: #2A3942;
+    --text-2: #54656F;
+    --text-3: #8696A0;
+    --border: #E4E8EB;
+    --green: #25D366;
+    --green-dark: #128C7E;
+    --green-deep: #075E54;
+    --teal: #00A884;
+    --white: #FFFFFF;
+  }
 
-    /* ── Chat Area ────────────────────────────────────── */
-    .chat-area {
-      flex: 1;
-      overflow-y: auto;
-      padding: 12px 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      scroll-behavior: smooth;
-    }
-    .chat-area::-webkit-scrollbar { width: 4px; }
-    .chat-area::-webkit-scrollbar-thumb { background: #2a3942; border-radius: 2px; }
+  .container {
+    max-width: 1140px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
 
-    /* ── Date divider ──────────────────────────────────── */
-    .date-divider {
-      text-align: center;
-      margin: 8px 0;
-    }
-    .date-divider span {
-      background: #1f2c34;
-      color: #8696a0;
-      font-size: 11px;
-      padding: 4px 10px;
-      border-radius: 8px;
-    }
+  /* ════════════════════════════════════════════════════════════
+     SECTION HEAD (Primal-style centered with green accent bar)
+  ════════════════════════════════════════════════════════════ */
+  .section-head {
+    text-align: center;
+    margin-bottom: 64px;
+  }
+  .section-head .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--ink-1);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+  .section-head .eyebrow::before {
+    content: '';
+    width: 4px;
+    height: 16px;
+    background: var(--green);
+    border-radius: 2px;
+  }
+  .section-head h2 {
+    font-size: clamp(28px, 4vw, 38px);
+    font-weight: 700;
+    color: var(--ink-1);
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    max-width: 760px;
+    margin: 0 auto 16px;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  .section-head h2::before {
+    content: '';
+    width: 5px;
+    height: 30px;
+    background: var(--green);
+    border-radius: 2px;
+    transform: translateY(4px);
+    flex-shrink: 0;
+  }
+  .section-head p.sub {
+    color: var(--text-3);
+    font-size: 17px;
+    font-weight: 400;
+    font-style: italic;
+    max-width: 580px;
+    margin: 0 auto;
+  }
 
-    /* ── Message Bubbles ──────────────────────────────── */
-    .message { display: flex; margin: 2px 0; animation: fadeUp .2s ease-out; }
-    .message.bot { justify-content: flex-start; }
-    .message.user { justify-content: flex-end; }
-    @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+  /* Inline (left-aligned) head variant for split sections */
+  .head-inline {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+  .head-inline::before {
+    content: '';
+    width: 5px;
+    height: 30px;
+    background: var(--green);
+    border-radius: 2px;
+    transform: translateY(4px);
+    flex-shrink: 0;
+  }
+  .head-inline h2 {
+    font-size: clamp(26px, 3.5vw, 34px);
+    font-weight: 700;
+    color: var(--white);
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+  }
 
-    .bubble {
-      max-width: 78%;
-      padding: 8px 12px;
-      border-radius: 8px;
-      font-size: 14px;
-      line-height: 1.5;
-      word-break: break-word;
-      position: relative;
-    }
-    .bubble.bot { background: #1f2c34; color: #e9edef; border-top-left-radius: 2px; }
-    .bubble.user { background: #005c4b; color: #e9edef; border-top-right-radius: 2px; }
-    .bubble-text { white-space: pre-line; }
-    .bubble-time {
-      font-size: 10px;
-      color: rgba(233,237,239,.5);
-      text-align: right;
-      margin-top: 4px;
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      gap: 3px;
-    }
-    .tick { color: #53bdeb; font-size: 12px; }
+  /* ════════════════════════════════════════════════════════════
+     BUTTONS
+  ════════════════════════════════════════════════════════════ */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 14px 28px;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.4px;
+    border: none;
+    transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .btn-green {
+    background: var(--green);
+    color: var(--white);
+  }
+  .btn-green:hover {
+    background: var(--green-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(37,211,102,0.25);
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--white);
+    border: 1.5px solid rgba(255,255,255,0.4);
+  }
+  .btn-ghost:hover { border-color: var(--white); background: rgba(255,255,255,0.06); }
+  .btn-outline-dark {
+    background: transparent;
+    color: var(--ink-1);
+    border: 1.5px solid var(--ink-1);
+  }
+  .btn-outline-dark:hover {
+    background: var(--ink-1);
+    color: var(--white);
+    transform: translateY(-2px);
+  }
+  .btn-link {
+    color: var(--ink-1);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    border-bottom: 1.5px solid var(--green);
+    padding-bottom: 4px;
+    transition: color 0.15s;
+  }
+  .btn-link:hover { color: var(--green); }
 
-    /* ── Image bubble ─────────────────────────────────── */
-    .bubble-img {
-      width: 100%;
-      max-width: 220px;
-      border-radius: 6px;
-      display: block;
-      cursor: pointer;
-    }
+  /* ════════════════════════════════════════════════════════════
+     NAVIGATION
+  ════════════════════════════════════════════════════════════ */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(255,255,255,0.96);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 0;
+    gap: 24px;
+  }
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 800;
+    font-size: 22px;
+    letter-spacing: 0.5px;
+    color: var(--ink-1);
+  }
+  .logo::before {
+    content: '';
+    width: 4px;
+    height: 22px;
+    background: var(--green);
+    border-radius: 2px;
+  }
+  .logo .sub {
+    display: block;
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    color: var(--green);
+    font-weight: 700;
+    margin-top: 2px;
+  }
+  .logo-wrap { display: inline-flex; flex-direction: column; line-height: 1; }
+  .nav-links {
+    display: flex;
+    gap: 36px;
+    list-style: none;
+  }
+  .nav-links a {
+    color: var(--text-2);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: color 0.15s;
+  }
+  .nav-links a:hover, .nav-links a.active { color: var(--green); }
 
-    /* ── File bubble ──────────────────────────────────── */
-    .file-bubble {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 4px 0;
-    }
-    .file-icon { font-size: 28px; }
-    .file-name { font-size: 13px; font-weight: 500; color: #e9edef; }
-    .file-size { font-size: 11px; color: #8696a0; margin-top: 2px; }
+  .nav-toggle {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--ink-1);
+    font-size: 22px;
+  }
 
-    /* ── Dashboard card ───────────────────────────────── */
-    .dashboard-card {
-      background: rgba(37,211,102,.08);
-      border: 1px solid rgba(37,211,102,.25);
-      border-radius: 10px;
-      padding: 12px;
-      margin-top: 8px;
-      cursor: pointer;
-      transition: background .2s;
-      text-decoration: none;
-      display: block;
-    }
-    .dashboard-card:hover { background: rgba(37,211,102,.15); }
-    .dashboard-card .dc-title { font-size: 13px; font-weight: 600; color: #25d366; margin-bottom: 3px; }
-    .dashboard-card .dc-url { font-size: 11px; color: #53bdeb; }
-    .dashboard-card .dc-hint { font-size: 11px; color: #8696a0; margin-top: 3px; }
+  @media (max-width: 880px) {
+    .nav-links { display: none; }
+    .nav-toggle { display: block; }
+  }
 
-    /* ── Upload hint ──────────────────────────────────── */
-    .upload-hint {
-      background: rgba(37,211,102,.06);
-      border: 1px dashed rgba(37,211,102,.3);
-      border-radius: 8px;
-      padding: 8px 10px;
-      margin-top: 8px;
-      font-size: 12px;
-      color: #25d366;
-      text-align: center;
-      cursor: pointer;
-    }
-    .upload-hint:hover { background: rgba(37,211,102,.12); }
+  /* mobile menu */
+  .mobile-menu {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: var(--white);
+    z-index: 200;
+    flex-direction: column;
+    padding: 28px 24px;
+    gap: 24px;
+  }
+  .mobile-menu.open { display: flex; }
+  .mobile-menu-head { display: flex; justify-content: space-between; align-items: center; }
+  .mobile-menu nav { display: flex; flex-direction: column; gap: 8px; margin-top: 24px; }
+  .mobile-menu nav a {
+    color: var(--ink-1);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border);
+  }
 
-    /* ── Typing indicator ─────────────────────────────── */
-    .typing-wrap {
-      display: flex;
-      padding: 0 16px 8px;
-      flex-shrink: 0;
-    }
-    .typing-bubble {
-      background: #1f2c34;
-      border-radius: 8px;
-      border-top-left-radius: 2px;
-      padding: 10px 14px;
-      display: flex;
-      gap: 4px;
-      align-items: center;
-    }
-    .dot { width: 7px; height: 7px; background: #8696a0; border-radius: 50%; animation: bounce 1.2s infinite; }
-    .dot:nth-child(2) { animation-delay: .2s; }
-    .dot:nth-child(3) { animation-delay: .4s; }
-    @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
+  /* ════════════════════════════════════════════════════════════
+     HERO
+  ════════════════════════════════════════════════════════════ */
+  .hero {
+    position: relative;
+    min-height: 88vh;
+    background:
+      linear-gradient(135deg, rgba(31,44,52,0.85), rgba(31,44,52,0.7)),
+      radial-gradient(circle at 20% 40%, rgba(37,211,102,0.18), transparent 50%),
+      linear-gradient(135deg, #2A3942 0%, #1F2C34 100%);
+    display: flex;
+    align-items: center;
+    padding: 80px 0;
+    overflow: hidden;
+  }
+  .hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 80% 30%, rgba(37,211,102,0.08), transparent 60%);
+    pointer-events: none;
+  }
+  .hero-inner {
+    position: relative;
+    max-width: 900px;
+    z-index: 1;
+  }
+  .hero h1 {
+    font-size: clamp(38px, 6vw, 64px);
+    font-weight: 700;
+    color: var(--white);
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+    margin-bottom: 28px;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 18px;
+  }
+  .hero h1::before {
+    content: '';
+    width: 6px;
+    height: 56px;
+    background: var(--green);
+    border-radius: 3px;
+    transform: translateY(8px);
+    flex-shrink: 0;
+  }
+  .hero p.lead {
+    color: rgba(255,255,255,0.78);
+    font-size: 17px;
+    line-height: 1.6;
+    max-width: 560px;
+    margin-bottom: 40px;
+    padding-left: 22px;
+    border-left: 3px solid var(--green);
+  }
+  .hero-actions {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
 
-    /* ── Input area ───────────────────────────────────── */
-    .input-area {
-      background: #1f2c34;
-      padding: 8px 12px;
-      display: flex;
-      align-items: flex-end;
-      gap: 8px;
-      border-top: 1px solid #2a3942;
-      flex-shrink: 0;
-    }
-    .input-side { display: flex; gap: 12px; align-items: center; color: #8696a0; font-size: 20px; }
-    .attach-label { cursor: pointer; transition: color .2s; }
-    .attach-label:hover { color: #25d366; }
-    #file-input { display: none; }
+  /* slide dots (decorative — like Primal) */
+  /* slide stacking */
+  .hero-slide {
+    display: none;
+    animation: heroFade 0.6s ease;
+  }
+  .hero-slide.on { display: block; }
+  @keyframes heroFade {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
 
-    .msg-input {
-      flex: 1;
-      background: #2a3942;
-      border: none;
-      border-radius: 22px;
-      padding: 10px 16px;
-      color: #e9edef;
-      font-size: 14px;
-      font-family: 'Inter', sans-serif;
-      resize: none;
-      max-height: 120px;
-      outline: none;
-      line-height: 1.4;
-    }
-    .msg-input::placeholder { color: #8696a0; }
+  .hero-dots {
+    position: absolute;
+    bottom: 36px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    z-index: 3;
+  }
+  .hero-dots button {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.3);
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s;
+  }
+  .hero-dots button:hover { background: rgba(255,255,255,0.6); transform: scale(1.2); }
+  .hero-dots button.on { background: var(--white); transform: scale(1.2); }
 
-    .send-btn {
-      width: 44px; height: 44px;
-      background: #00a884;
-      border: none;
-      border-radius: 50%;
-      color: #fff;
-      font-size: 18px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background .2s, transform .1s;
-      flex-shrink: 0;
-    }
-    .send-btn:hover { background: #25d366; transform: scale(1.05); }
-    .send-btn:active { transform: scale(.95); }
-    .send-btn:disabled { background: #2a3942; cursor: not-allowed; transform: none; }
+  @media (max-width: 700px) {
+    .hero { padding: 60px 0; min-height: auto; }
+    .hero h1 { gap: 12px; }
+    .hero h1::before { height: 40px; width: 5px; }
+    .hero-actions .btn { width: 100%; }
+    .hero-actions { flex-direction: column; }
+  }
 
-    /* ── Upload progress overlay ──────────────────────── */
-    .upload-overlay {
-      display: none;
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,.5);
-      align-items: center;
-      justify-content: center;
-      z-index: 100;
-    }
-    .upload-overlay.show { display: flex; }
-    .upload-box {
-      background: #1f2c34;
-      border: 1px solid #2a3942;
-      border-radius: 16px;
-      padding: 28px 36px;
-      text-align: center;
-      color: #e9edef;
-    }
-    .upload-box .upload-icon { font-size: 40px; margin-bottom: 12px; }
-    .upload-box .upload-name { font-size: 14px; font-weight: 600; margin-bottom: 16px; }
-    .progress-track { height: 6px; background: #2a3942; border-radius: 3px; overflow: hidden; width: 220px; }
-    .progress-fill { height: 100%; background: #25d366; border-radius: 3px; transition: width .3s; }
-    /* ── WhatsApp CTA banner ───────────────────────────── */
-    .page-wrap {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 16px;
-      padding: 20px 16px;
-      min-height: 100vh;
-      justify-content: center;
-    }
-    .wa-banner {
-      background: linear-gradient(135deg, #1a3c34, #0d2b24);
-      border: 1px solid rgba(37,211,102,.3);
-      border-radius: 16px;
-      padding: 14px 24px;
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      max-width: 390px;
-      width: 100%;
-    }
-    .wa-banner-icon { font-size: 32px; flex-shrink: 0; }
-    .wa-banner-text { flex: 1; }
-    .wa-banner-title { font-size: 13px; font-weight: 600; color: #e9edef; margin-bottom: 2px; }
-    .wa-banner-sub { font-size: 11px; color: #8696a0; }
-    .wa-banner-btn {
-      background: #25d366;
-      color: #fff;
-      border: none;
-      border-radius: 20px;
-      padding: 8px 16px;
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      white-space: nowrap;
-      text-decoration: none;
-      display: inline-block;
-      transition: background .2s, transform .1s;
-    }
-    .wa-banner-btn:hover { background: #128c7e; transform: scale(1.03); }
+  /* ════════════════════════════════════════════════════════════
+     SECTION BASE
+  ════════════════════════════════════════════════════════════ */
+  section.block {
+    padding: 110px 0;
+  }
+  section.block.soft { background: var(--bg-soft); }
 
-    /* ── Floating WhatsApp button ──────────────────────── */
-    .wa-float {
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      width: 58px; height: 58px;
-      background: #25d366;
-      border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 28px;
-      box-shadow: 0 4px 20px rgba(37,211,102,.5);
-      cursor: pointer;
-      text-decoration: none;
-      z-index: 999;
-      transition: transform .2s, box-shadow .2s;
-      animation: pulse-wa 2s infinite;
-    }
-    .wa-float:hover { transform: scale(1.1); box-shadow: 0 6px 28px rgba(37,211,102,.7); }
-    @keyframes pulse-wa {
-      0%,100% { box-shadow: 0 4px 20px rgba(37,211,102,.5); }
-      50% { box-shadow: 0 4px 30px rgba(37,211,102,.8); }
-    }
-    .wa-float-tooltip {
-      position: fixed;
-      bottom: 90px;
-      right: 24px;
-      background: #1f2c34;
-      color: #e9edef;
-      font-size: 12px;
-      padding: 6px 12px;
-      border-radius: 8px;
-      border: 1px solid #2a3942;
-      white-space: nowrap;
-      z-index: 999;
-      opacity: 0;
-      transform: translateY(4px);
-      transition: opacity .2s, transform .2s;
-      pointer-events: none;
-    }
-    .wa-float:hover + .wa-float-tooltip { opacity: 1; transform: translateY(0); }
+  @media (max-width: 700px) {
+    section.block { padding: 72px 0; }
+    .section-head { margin-bottom: 44px; }
+  }
 
-    @media (max-width: 480px) {
-      body {
-        background: #0b141a;
-        display: block;
-      }
-      .page-wrap {
-        padding: 0;
-        gap: 0;
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
-        align-items: stretch;
-        justify-content: stretch;
-      }
-      .phone {
-        width: 100%;
-        height: 100vh;
-        border-radius: 0;
-        border: none;
-        box-shadow: none;
-        flex: 1;
-      }
-      .wa-banner {
-        display: none;
-      }
+  /* ════════════════════════════════════════════════════════════
+     SOLUTIONS — 2-card row (Primal Solutions style)
+  ════════════════════════════════════════════════════════════ */
+  .solutions-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 60px;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  .solution {
+    display: flex;
+    gap: 28px;
+    align-items: flex-start;
+  }
+  .solution .icon-wrap {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    background: var(--white);
+    border: 1.5px solid var(--border);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .solution .icon-wrap i {
+    font-size: 36px;
+    color: var(--green);
+  }
+  .solution-body { flex: 1; }
+  .solution h3 {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    font-size: 19px;
+    font-weight: 700;
+    color: var(--ink-1);
+    margin-bottom: 12px;
+  }
+  .solution h3::before {
+    content: '';
+    width: 4px;
+    height: 16px;
+    background: var(--green);
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .solution p {
+    color: var(--text-3);
+    font-size: 14px;
+    line-height: 1.7;
+    margin-bottom: 16px;
+  }
+
+  @media (max-width: 800px) {
+    .solutions-grid { grid-template-columns: 1fr; gap: 40px; }
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     VIDEO SECTION — portrait video + split text layout
+  ════════════════════════════════════════════════════════════ */
+  .video-band {
+    position: relative;
+    background:
+      linear-gradient(135deg, rgba(13,22,28,0.96), rgba(20,32,40,0.94)),
+      radial-gradient(ellipse at 78% 50%, rgba(37,211,102,0.18), transparent 55%),
+      radial-gradient(ellipse at 12% 100%, rgba(37,211,102,0.07), transparent 55%),
+      #0D161C;
+    color: var(--white);
+    padding: 110px 0;
+    overflow: hidden;
+  }
+  /* faint dot grid for depth */
+  .video-band::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(rgba(255,255,255,0.045) 1px, transparent 1px);
+    background-size: 28px 28px;
+    pointer-events: none;
+    opacity: 0.7;
+  }
+  /* soft accent line on the left edge */
+  .video-band::after {
+    content: '';
+    position: absolute;
+    left: 0; top: 25%; bottom: 25%;
+    width: 2px;
+    background: linear-gradient(180deg, transparent, var(--green), transparent);
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  .video-grid {
+    display: grid;
+    grid-template-columns: 0.95fr 1fr;
+    gap: 80px;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+  }
+
+  .video-text .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    color: rgba(255,255,255,0.9);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+  .video-text .eyebrow::before {
+    content: '';
+    width: 4px;
+    height: 16px;
+    background: var(--green);
+    border-radius: 2px;
+  }
+  .video-text .vt-h2 {
+    font-size: clamp(28px, 4vw, 40px);
+    font-weight: 700;
+    color: var(--white);
+    line-height: 1.18;
+    letter-spacing: -0.01em;
+    margin-bottom: 18px;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  .video-text .vt-h2::before {
+    content: '';
+    width: 5px;
+    height: 30px;
+    background: var(--green);
+    border-radius: 2px;
+    transform: translateY(4px);
+    flex-shrink: 0;
+  }
+  .video-text .vt-lead {
+    color: rgba(255,255,255,0.72);
+    font-size: 16px;
+    line-height: 1.7;
+    max-width: 440px;
+    margin-bottom: 28px;
+  }
+
+  .video-steps {
+    list-style: none;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .video-steps li {
+    display: flex;
+    gap: 22px;
+    padding: 18px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .video-steps .n {
+    color: var(--green);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    min-width: 30px;
+    padding-top: 3px;
+    font-family: 'Inter', monospace;
+  }
+  .video-steps h4 {
+    color: var(--white);
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .video-steps p {
+    color: rgba(255,255,255,0.6);
+    font-size: 13.5px;
+    line-height: 1.6;
+  }
+
+  .video-frame-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+  }
+  /* green glow behind the player */
+  .video-frame-wrap::before {
+    content: '';
+    position: absolute;
+    width: 70%;
+    height: 80%;
+    background: radial-gradient(circle, rgba(37,211,102,0.30), transparent 65%);
+    filter: blur(50px);
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .video-frame {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 340px;
+    aspect-ratio: 9 / 16;
+    border-radius: 28px;
+    overflow: hidden;
+    background: #000;
+    box-shadow:
+      0 30px 80px rgba(0,0,0,0.55),
+      0 0 0 1px rgba(255,255,255,0.10),
+      0 0 0 8px rgba(255,255,255,0.04);
+  }
+  .video-frame video {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+    background: #000;
+  }
+
+  @media (max-width: 900px) {
+    .video-grid {
+      grid-template-columns: 1fr;
+      gap: 56px;
     }
-  </style>
+    .video-text { text-align: left; }
+    .video-frame { max-width: 300px; }
+  }
+  @media (max-width: 700px) {
+    .video-band { padding: 72px 0; }
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     MISSION SPLIT — dark left + chatbot right
+  ════════════════════════════════════════════════════════════ */
+  .mission-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    min-height: 720px;
+  }
+  .mission-left {
+    background: var(--ink-2);
+    padding: 100px 60px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .mission-left p.highlight {
+    color: var(--green);
+    font-size: 21px;
+    font-weight: 600;
+    line-height: 1.4;
+    margin-bottom: 28px;
+  }
+  .mission-left p.body {
+    color: rgba(255,255,255,0.7);
+    font-size: 15px;
+    line-height: 1.75;
+    margin-bottom: 36px;
+    max-width: 460px;
+  }
+  .mission-left .cta-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--green);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .mission-left .cta-row .ico {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    border: 1.5px solid var(--green);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: background 0.15s, color 0.15s;
+  }
+  .mission-left .cta-row:hover .ico { background: var(--green); color: var(--ink-1); }
+  .demo-ops-panel {
+    margin: 28px 0 24px;
+    padding: 20px 24px;
+    border-left: 3px solid var(--green);
+    background: rgba(37,211,102,.05);
+    border-radius: 0 8px 8px 0;
+  }
+  .demo-eyebrow {
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--green);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .demo-ops-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 12px;
+  }
+  .demo-ops-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .demo-ops-list li {
+    font-size: 0.85rem;
+    color: rgba(255,255,255,.82);
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    line-height: 1.45;
+  }
+  .demo-ops-list li .fa-circle-check { color: var(--green); font-size: 0.8rem; margin-top: 3px; flex-shrink: 0; }
+  .demo-note {
+    font-size: 0.78rem;
+    color: rgba(255,255,255,.45);
+    margin-bottom: 12px;
+    line-height: 1.5;
+  }
+  .demo-wa-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--green);
+    text-decoration: none;
+    border: 1px solid rgba(37,211,102,.35);
+    padding: 6px 14px;
+    border-radius: 6px;
+    transition: background .18s;
+  }
+  .demo-wa-link:hover { background: rgba(37,211,102,.12); }
+
+  .mission-right {
+    background:
+      linear-gradient(135deg, #1F2C34, #0B141A);
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 40px;
+    overflow: hidden;
+  }
+  .mission-right::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 50% 30%, rgba(37,211,102,0.10), transparent 60%);
+  }
+
+  @media (max-width: 1000px) {
+    .mission-split { grid-template-columns: 1fr; min-height: auto; }
+    .mission-left { padding: 64px 40px; }
+    .mission-right { padding: 40px 20px; }
+  }
+  @media (max-width: 500px) {
+    .mission-left { padding: 48px 24px; }
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     PHONE (chatbot) — EXISTING STYLES, PRESERVED + ADAPTED
+  ════════════════════════════════════════════════════════════ */
+  .phone {
+    width: 360px;
+    height: 720px;
+    background: #0B141A;
+    border-radius: 40px;
+    border: 2px solid #2A3942;
+    box-shadow: 0 30px 80px rgba(0,0,0,.5), 0 0 0 1px #1A2832;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    z-index: 1;
+  }
+  .status-bar {
+    background: #1F2C34;
+    padding: 8px 20px 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: #AEBAC1;
+    flex-shrink: 0;
+  }
+  .status-time { font-weight: 600; }
+
+  .wa-header {
+    background: #1F2C34;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid #2A3942;
+    flex-shrink: 0;
+  }
+  .avatar {
+    width: 40px; height: 40px;
+    background: linear-gradient(135deg, #25D366, #128C7E);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+  }
+  .contact-info { flex: 1; min-width: 0; }
+  .contact-name { font-size: 15px; font-weight: 600; color: #E9EDEF; }
+  .contact-status { font-size: 12px; color: #8696A0; margin-top: 1px; }
+  .header-icons { display: flex; gap: 16px; color: #8696A0; font-size: 18px; }
+  .header-icons span { cursor: pointer; }
+
+  .chat-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    scroll-behavior: smooth;
+  }
+  .chat-area::-webkit-scrollbar { width: 4px; }
+  .chat-area::-webkit-scrollbar-thumb { background: #2A3942; border-radius: 2px; }
+
+  .date-divider { text-align: center; margin: 8px 0; }
+  .date-divider span {
+    background: #1F2C34;
+    color: #8696A0;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 8px;
+  }
+
+  .message { display: flex; margin: 2px 0; animation: fadeUp .2s ease-out; }
+  .message.bot { justify-content: flex-start; }
+  .message.user { justify-content: flex-end; }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+
+  .bubble {
+    max-width: 78%;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.5;
+    word-break: break-word;
+    position: relative;
+  }
+  .bubble.bot { background: #1F2C34; color: #E9EDEF; border-top-left-radius: 2px; }
+  .bubble.user { background: #005C4B; color: #E9EDEF; border-top-right-radius: 2px; }
+  .bubble-text { white-space: pre-line; }
+  .bubble-time {
+    font-size: 10px;
+    color: rgba(233,237,239,.5);
+    text-align: right;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 3px;
+  }
+  .tick { color: #53BDEB; font-size: 12px; }
+
+  .bubble-img {
+    width: 100%;
+    max-width: 220px;
+    border-radius: 6px;
+    display: block;
+    cursor: pointer;
+  }
+  .file-bubble {
+    display: flex; align-items: center; gap: 10px; padding: 4px 0;
+  }
+  .file-icon { font-size: 28px; }
+  .file-name { font-size: 13px; font-weight: 500; color: #E9EDEF; }
+  .file-size { font-size: 11px; color: #8696A0; margin-top: 2px; }
+
+  .dashboard-card {
+    background: rgba(37,211,102,.08);
+    border: 1px solid rgba(37,211,102,.25);
+    border-radius: 10px;
+    padding: 12px;
+    margin-top: 8px;
+    cursor: pointer;
+    transition: background .2s;
+    text-decoration: none;
+    display: block;
+  }
+  .dashboard-card:hover { background: rgba(37,211,102,.15); }
+  .dashboard-card .dc-title { font-size: 13px; font-weight: 600; color: #25D366; margin-bottom: 3px; }
+  .dashboard-card .dc-url { font-size: 11px; color: #53BDEB; }
+  .dashboard-card .dc-hint { font-size: 11px; color: #8696A0; margin-top: 3px; }
+
+  .upload-hint {
+    background: rgba(37,211,102,.06);
+    border: 1px dashed rgba(37,211,102,.3);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: #25D366;
+    text-align: center;
+    cursor: pointer;
+  }
+  .upload-hint:hover { background: rgba(37,211,102,.12); }
+
+  .typing-wrap { display: flex; padding: 0 16px 8px; flex-shrink: 0; }
+  .typing-bubble {
+    background: #1F2C34;
+    border-radius: 8px;
+    border-top-left-radius: 2px;
+    padding: 10px 14px;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .typing-bubble .dot { width: 7px; height: 7px; background: #8696A0; border-radius: 50%; animation: bounce 1.2s infinite; }
+  .typing-bubble .dot:nth-child(2) { animation-delay: .2s; }
+  .typing-bubble .dot:nth-child(3) { animation-delay: .4s; }
+  @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
+
+  .input-area {
+    background: #1F2C34;
+    padding: 8px 12px;
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    border-top: 1px solid #2A3942;
+    flex-shrink: 0;
+  }
+  .input-side { display: flex; gap: 12px; align-items: center; color: #8696A0; font-size: 20px; }
+  .attach-label { cursor: pointer; transition: color .2s; }
+  .attach-label:hover { color: #25D366; }
+  #file-input { display: none; }
+
+  .msg-input {
+    flex: 1;
+    background: #2A3942;
+    border: none;
+    border-radius: 22px;
+    padding: 10px 16px;
+    color: #E9EDEF;
+    font-size: 14px;
+    font-family: 'Inter', sans-serif;
+    resize: none;
+    max-height: 120px;
+    outline: none;
+    line-height: 1.4;
+  }
+  .msg-input::placeholder { color: #8696A0; }
+
+  .send-btn {
+    width: 44px; height: 44px;
+    background: #00A884;
+    border: none;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background .2s, transform .1s;
+    flex-shrink: 0;
+  }
+  .send-btn:hover { background: #25D366; transform: scale(1.05); }
+  .send-btn:active { transform: scale(.95); }
+  .send-btn:disabled { background: #2A3942; cursor: not-allowed; transform: none; }
+
+  .upload-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,.5);
+    align-items: center;
+    justify-content: center;
+    z-index: 500;
+  }
+  .upload-overlay.show { display: flex; }
+  .upload-box {
+    background: #1F2C34;
+    border: 1px solid #2A3942;
+    border-radius: 16px;
+    padding: 28px 36px;
+    text-align: center;
+    color: #E9EDEF;
+  }
+  .upload-box .upload-icon { font-size: 40px; margin-bottom: 12px; }
+  .upload-box .upload-name { font-size: 14px; font-weight: 600; margin-bottom: 16px; }
+  .progress-track { height: 6px; background: #2A3942; border-radius: 3px; overflow: hidden; width: 220px; }
+  .progress-fill { height: 100%; background: #25D366; border-radius: 3px; transition: width .3s; }
+
+  @media (max-width: 500px) {
+    .phone { width: 100%; max-width: 360px; height: 640px; }
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     PROBLEMS — 9-card grid with research validation block
+  ════════════════════════════════════════════════════════════ */
+  .problems-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 22px;
+    max-width: 1080px;
+    margin: 0 auto;
+  }
+  .problem-card {
+    background: var(--white);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 26px 24px;
+    position: relative;
+    transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+  }
+  .problem-card:hover {
+    border-color: var(--green);
+    transform: translateY(-3px);
+    box-shadow: 0 12px 32px rgba(37,211,102,0.08);
+  }
+  .problem-card .pc-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .problem-card .pc-icon {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    background: rgba(37,211,102,0.08);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .problem-card .pc-icon i {
+    color: var(--green-dark);
+    font-size: 17px;
+  }
+  .problem-card .pc-num {
+    color: var(--text-3);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    font-family: 'Inter', monospace;
+  }
+  .problem-card h3 {
+    color: var(--ink-1);
+    font-size: 15.5px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    line-height: 1.3;
+  }
+  .problem-card p {
+    color: var(--text-3);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .problems-validation {
+    margin: 72px auto 0;
+    background: var(--white);
+    border: 1.5px solid rgba(37,211,102,0.45);
+    border-radius: 16px;
+    padding: 40px 36px;
+    text-align: center;
+    max-width: 760px;
+    box-shadow: 0 12px 36px rgba(37,211,102,0.06);
+  }
+  .problems-validation .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--green);
+    color: var(--white);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    padding: 7px 16px;
+    border-radius: 999px;
+    margin-bottom: 18px;
+  }
+  .problems-validation h3 {
+    color: var(--ink-1);
+    font-size: clamp(20px, 2.6vw, 26px);
+    font-weight: 700;
+    margin-bottom: 14px;
+    line-height: 1.3;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .problems-validation h3::before {
+    content: '';
+    width: 4px;
+    height: 22px;
+    background: var(--green);
+    border-radius: 2px;
+    transform: translateY(3px);
+  }
+  .problems-validation p {
+    color: var(--text-2);
+    font-size: 15px;
+    line-height: 1.7;
+    max-width: 580px;
+    margin: 0 auto 28px;
+  }
+  .problems-validation p .em {
+    color: var(--ink-1);
+    font-weight: 600;
+  }
+  .problems-validation .row {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 900px) {
+    .problems-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 600px) {
+    .problems-grid { grid-template-columns: 1fr; max-width: 400px; }
+    .problems-validation { padding: 32px 24px; }
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     WHAT WE HELP WITH — 6-icon grid (Primal "What We Do" style)
+  ════════════════════════════════════════════════════════════ */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 56px 48px;
+    max-width: 1020px;
+    margin: 0 auto;
+  }
+  .feature {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+  }
+  .feature .fi {
+    width: 64px;
+    height: 64px;
+    background: rgba(37,211,102,0.08);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .feature .fi i { font-size: 24px; color: var(--green-dark); }
+  .feature-body h3 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink-1);
+    margin-bottom: 8px;
+  }
+  .feature-body p {
+    color: var(--text-3);
+    font-size: 13.5px;
+    line-height: 1.65;
+  }
+
+  .features-cta {
+    text-align: center;
+    margin-top: 64px;
+  }
+
+  @media (max-width: 900px) {
+    .features-grid { grid-template-columns: repeat(2, 1fr); gap: 44px 32px; }
+  }
+  @media (max-width: 600px) {
+    .features-grid { grid-template-columns: 1fr; gap: 36px; max-width: 380px; }
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     TESTIMONIAL — single centered (Primal "What Clients Say")
+  ════════════════════════════════════════════════════════════ */
+  .testimonial {
+    text-align: center;
+    max-width: 760px;
+    margin: 0 auto;
+    position: relative;
+  }
+  .testimonial-quote {
+    font-family: 'Inter', serif;
+    font-size: clamp(22px, 3vw, 30px);
+    font-weight: 400;
+    color: var(--ink-1);
+    line-height: 1.4;
+    font-style: italic;
+    margin-bottom: 28px;
+  }
+  .testimonial-body {
+    color: var(--text-3);
+    font-size: 14px;
+    line-height: 1.7;
+    max-width: 540px;
+    margin: 0 auto 36px;
+    font-style: italic;
+  }
+  .testimonial-attr {
+    display: inline-flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .testimonial-attr .avatar-circle {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #25D366, #128C7E);
+    color: var(--white);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 700;
+  }
+  .testimonial-attr .who {
+    text-align: left;
+  }
+  .testimonial-attr .who .n {
+    color: var(--ink-1);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .testimonial-attr .who .w {
+    color: var(--text-3);
+    font-size: 13px;
+    margin-top: 2px;
+  }
+  .arrows {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--border);
+    font-size: 24px;
+    cursor: default;
+    user-select: none;
+  }
+  .arrows.l { left: -60px; }
+  .arrows.r { right: -60px; }
+  @media (max-width: 900px) { .arrows { display: none; } }
+
+  /* ════════════════════════════════════════════════════════════
+     CONTACT BAND
+  ════════════════════════════════════════════════════════════ */
+  .contact-band {
+    background:
+      linear-gradient(135deg, rgba(31,44,52,0.92), rgba(31,44,52,0.85)),
+      radial-gradient(circle at 70% 50%, rgba(37,211,102,0.15), transparent 60%),
+      #1F2C34;
+    padding: 96px 0;
+    color: var(--white);
+    text-align: center;
+  }
+  .contact-band h2 {
+    font-size: clamp(26px, 3.5vw, 36px);
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 18px;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  .contact-band h2::before {
+    content: '';
+    width: 5px;
+    height: 30px;
+    background: var(--green);
+    border-radius: 2px;
+    transform: translateY(4px);
+  }
+  .contact-band p {
+    color: rgba(255,255,255,0.7);
+    font-size: 16px;
+    max-width: 540px;
+    margin: 0 auto 36px;
+    font-style: italic;
+  }
+  .contact-band .row {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     FOOTER
+  ════════════════════════════════════════════════════════════ */
+  footer {
+    background: var(--white);
+    padding: 56px 0 24px;
+    border-top: 1px solid var(--border);
+  }
+  .footer-grid {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr 1.2fr;
+    gap: 56px;
+    padding-bottom: 40px;
+  }
+  .footer-col h5 {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--ink-1);
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .footer-col h5::before {
+    content: '';
+    width: 3px;
+    height: 12px;
+    background: var(--green);
+    border-radius: 1px;
+  }
+  .footer-col .tagline {
+    color: var(--text-3);
+    font-size: 13px;
+    line-height: 1.65;
+    max-width: 280px;
+    margin-top: 14px;
+  }
+  .footer-col a {
+    display: block;
+    color: var(--text-3);
+    font-size: 13px;
+    padding: 6px 0;
+    transition: color 0.15s;
+  }
+  .footer-col a:hover { color: var(--green); }
+  .footer-col .contact-row {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .footer-col .contact-row i { color: var(--green); font-size: 14px; }
+  .footer-bottom {
+    border-top: 1px solid var(--border);
+    padding-top: 20px;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    color: var(--text-3);
+    font-size: 12px;
+  }
+  .footer-bottom .heart { color: var(--green); }
+
+  @media (max-width: 760px) {
+    .footer-grid { grid-template-columns: 1fr; gap: 36px; }
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     FLOATING WHATSAPP (preserved)
+  ════════════════════════════════════════════════════════════ */
+  .wa-float {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 58px; height: 58px;
+    background: #25D366;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px;
+    box-shadow: 0 4px 20px rgba(37,211,102,.5);
+    cursor: pointer;
+    text-decoration: none;
+    z-index: 99;
+    transition: transform .2s, box-shadow .2s;
+    animation: pulse-wa 2s infinite;
+  }
+  .wa-float:hover { transform: scale(1.1); box-shadow: 0 6px 28px rgba(37,211,102,.7); }
+  @keyframes pulse-wa {
+    0%,100% { box-shadow: 0 4px 20px rgba(37,211,102,.5); }
+    50% { box-shadow: 0 4px 30px rgba(37,211,102,.8); }
+  }
+
+  /* ════════════════════════════════════════════════════════════
+     FADE-IN
+  ════════════════════════════════════════════════════════════ */
+  .fade-in {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .fade-in.visible { opacity: 1; transform: translateY(0); }
+</style>
 </head>
 <body>
 
-<!-- WhatsApp floating button -->
-<a class="wa-float" href="https://wa.me/15556592233?text=Hi%20ShopBot!" target="_blank" title="Chat on WhatsApp">
+<!-- ════════════════════════════════════════════════════════════
+  NAVIGATION
+════════════════════════════════════════════════════════════ -->
+<header class="nav">
+  <div class="container nav-inner">
+    <a href="#" class="logo">
+      <span class="logo-wrap">
+        <span>TELLOS</span>
+        <span class="sub">INVENTORY</span>
+      </span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="#solutions">Solutions</a></li>
+      <li><a href="#problems" class="active">Problems</a></li>
+      <li><a href="#features">Help</a></li>
+      <li><a href="#contact">Contact</a></li>
+      <li><a href="#demo">Demo</a></li>
+    </ul>
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu"><i class="fa-solid fa-bars"></i></button>
+  </div>
+</header>
+
+<div class="mobile-menu" id="mobileMenu">
+  <div class="mobile-menu-head">
+    <a href="#" class="logo"><span class="logo-wrap"><span>TELLOS</span><span class="sub">INVENTORY</span></span></a>
+    <button class="nav-toggle" id="navClose" aria-label="Close menu"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+  <nav>
+    <a href="#solutions" class="mlink">Solutions</a>
+    <a href="#problems" class="mlink">Problems</a>
+    <a href="#mission" class="mlink">Mission</a>
+    <a href="#features" class="mlink">Help</a>
+    <a href="#contact" class="mlink">Contact</a>
+    <a href="#demo" class="mlink">Demo</a>
+  </nav>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+  HERO
+════════════════════════════════════════════════════════════ -->
+<section class="hero" id="home">
+  <div class="container hero-inner">
+
+    <div class="hero-slide on" data-slide="0">
+      <h1>Simple inventory help<br />for small sellers</h1>
+      <p class="lead">
+        We help early-stage sellers on WhatsApp and Meesho manage stock, orders,
+        and customers — without complex software or large budgets.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-green" href="#mission">See How It Works</a>
+        <a class="btn btn-ghost" href="https://wa.me/919094021738?text=Hi%20TellOs%2C%20I%20want%20to%20talk%20about%20my%20business%20problems" target="_blank">
+          <i class="fa-brands fa-whatsapp"></i> Talk On WhatsApp
+        </a>
+      </div>
+    </div>
+
+    <div class="hero-slide" data-slide="1">
+      <h1>Built around WhatsApp,<br />not against it</h1>
+      <p class="lead">
+        Send your Excel right inside a WhatsApp chat. We turn it into a live
+        dashboard you can open and update from your phone.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-green" href="#mission">Try The Assistant</a>
+        <a class="btn btn-ghost" href="#features">
+          <i class="fa-solid fa-arrow-right"></i> What We Help With
+        </a>
+      </div>
+    </div>
+
+    <div class="hero-slide" data-slide="2">
+      <h1>We listen first,<br />then we build</h1>
+      <p class="lead">
+        We have spoken with 20+ sellers across India. Every conversation teaches us
+        what to build — and what not to build. Yours could be next.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-green" href="#contact">Start A Conversation</a>
+        <a class="btn btn-ghost" href="#solutions">
+          <i class="fa-solid fa-arrow-right"></i> Our Approach
+        </a>
+      </div>
+    </div>
+
+  </div>
+  <div class="hero-dots" id="heroDots">
+    <button type="button" class="on" data-go="0" aria-label="Slide 1"></button>
+    <button type="button" data-go="1" aria-label="Slide 2"></button>
+    <button type="button" data-go="2" aria-label="Slide 3"></button>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+  SOLUTIONS
+════════════════════════════════════════════════════════════ -->
+<section class="block soft" id="solutions">
+  <div class="container">
+    <div class="section-head fade-in">
+      <span class="eyebrow">What we offer</span>
+      <h2>TellOs Solutions</h2>
+      <p class="sub">Built for sellers at the beginning — not at scale.</p>
+    </div>
+    <div class="solutions-grid">
+      <div class="solution fade-in">
+        <div class="icon-wrap"><i class="fa-solid fa-store"></i></div>
+        <div class="solution-body">
+          <h3>For Small Sellers</h3>
+          <p>Track stock, log orders, and follow up with customers from one place. No team needed. No app to install.</p>
+          <a href="#features" class="btn-link">Read more</a>
+        </div>
+      </div>
+      <div class="solution fade-in">
+        <div class="icon-wrap"><i class="fa-brands fa-whatsapp"></i></div>
+        <div class="solution-body">
+          <h3>For WhatsApp Business</h3>
+          <p>Send your Excel right inside WhatsApp. We turn it into a working dashboard you can update every day.</p>
+          <a href="#mission" class="btn-link">Read more</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+  VIDEO — "See it in action" (90-second walkthrough after solutions)
+════════════════════════════════════════════════════════════ -->
+<section class="video-band" id="demo">
+  <div class="container">
+    <div class="video-grid">
+
+      <div class="video-text fade-in">
+        <span class="eyebrow">See it in action</span>
+        <h2 class="vt-h2">A 90-second<br />walkthrough</h2>
+        <p class="vt-lead">
+          A real seller uploads a sheet, chats with TellOs, and opens a live
+          dashboard — start to finish, no edits.
+        </p>
+        <ul class="video-steps">
+          <li>
+            <span class="n">01</span>
+            <div>
+              <h4>Upload</h4>
+              <p>Excel, CSV, PDF, photo of a register — any format works.</p>
+            </div>
+          </li>
+          <li>
+            <span class="n">02</span>
+            <div>
+              <h4>Analyse</h4>
+              <p>Ask questions in plain language. The bot reads your data.</p>
+            </div>
+          </li>
+          <li>
+            <span class="n">03</span>
+            <div>
+              <h4>Dashboard</h4>
+              <p>Live metrics refresh every 10 seconds. Bookmark and open anytime.</p>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="video-frame-wrap fade-in">
+        <div class="video-frame">
+          <video
+            controls
+            preload="metadata"
+            playsinline
+            src="/media/TellOS_final_compressed.mp4">
+            Your browser does not support embedded video.
+            <a href="/media/TellOS_final_compressed.mp4">Download the video</a> instead.
+          </video>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+  PROBLEMS — Research findings as small cards
+════════════════════════════════════════════════════════════ -->
+<section class="block" id="problems">
+  <div class="container">
+    <div class="section-head fade-in">
+      <span class="eyebrow">Problems we found</span>
+      <h2>What actually breaks every day</h2>
+      <p class="sub">Mapped from real conversations with small sellers across India.</p>
+    </div>
+
+    <div class="problems-grid">
+      <div class="problem-card fade-in">
+        <div class="pc-head">
+          <span class="pc-icon"><i class="fa-solid fa-table-cells"></i></span>
+          <span class="pc-num">01</span>
+        </div>
+        <h3>The 3-sheet disaster</h3>
+        <p>Every product arrival, every order, every return — three sheets to update by hand. One missed entry and all three drift wrong.</p>
+      </div>
+
+      <div class="problem-card fade-in">
+        <div class="pc-head">
+          <span class="pc-icon"><i class="fa-solid fa-boxes-stacked"></i></span>
+          <span class="pc-num">02</span>
+        </div>
+        <h3>Stockout blindspot</h3>
+        <p>No alert before your bestseller runs out. You find out only when a customer orders and you can't deliver.</p>
+      </div>
+
+      <div class="problem-card fade-in">
+        <div class="pc-head">
+          <span class="pc-icon"><i class="fa-solid fa-rotate-right"></i></span>
+          <span class="pc-num">03</span>
+        </div>
+        <h3>Reorder from memory</h3>
+        <p>You buy what you think sold well. Three months later you have dead stock in your room that nobody wants.</p>
+      </div>
+
+      <div class="problem-card fade-in">
+        <div class="pc-head">
+          <span class="pc-icon"><i class="fa-brands fa-whatsapp"></i></span>
+          <span class="pc-num">04</span>
+        </div>
+        <h3>Orders lost in chats</h3>
+        <p>An order sits inside a thread with 200 messages. You scroll past it. The customer never hears back.</p>
+      </div>
+
+      <div class="problem-card fade-in">
+        <div class="pc-head">
+          <span class="pc-icon"><i class="fa-solid fa-chart-line"></i></span>
+          <span class="pc-num">05</span>
+        </div>
+        <h3>Revenue is not profit</h3>
+        <p>Courier, returns, packaging, platform fees — the real number is much lower than what you tell your family.</p>
+      </div>
+
+      <div class="problem-card fade-in">
+        <div class="pc-head">
+          <span class="pc-icon"><i class="fa-solid fa-user-clock"></i></span>
+          <span class="pc-num">06</span>
+        </div>
+        <h3>No customer memory</h3>
+        <p>Hundreds of buyers from last year. Zero record of who they are or what they bought. Re-engagement is impossible.</p>
+      </div>
+
+      <div class="problem-card fade-in">
+        <div class="pc-head">
+          <span class="pc-icon"><i class="fa-solid fa-ban"></i></span>
+          <span class="pc-num">07</span>
+        </div>
+        <h3>Catalog limits and blocks</h3>
+        <p>300-product cap. Uploads fail without reason. Sometimes the whole catalog gets blocked mid-season.</p>
+      </div>
+
+      <div class="problem-card fade-in">
+        <div class="pc-head">
+          <span class="pc-icon"><i class="fa-solid fa-calendar-xmark"></i></span>
+          <span class="pc-num">08</span>
+        </div>
+        <h3>Festival season panic</h3>
+        <p>Diwali is 4 weeks away. You don't know what sold last year. You order based on instinct. You guess wrong.</p>
+      </div>
+
+      <div class="problem-card fade-in">
+        <div class="pc-head">
+          <span class="pc-icon"><i class="fa-solid fa-mobile-screen"></i></span>
+          <span class="pc-num">09</span>
+        </div>
+        <h3>No tool reads WhatsApp</h3>
+        <p>Orders, customers, suppliers — all live in WhatsApp. Every other tool asks you to re-enter everything by hand.</p>
+      </div>
+    </div>
+
+    <div class="problems-validation fade-in">
+      <span class="badge"><i class="fa-solid fa-magnifying-glass"></i> Research findings</span>
+      <h3>Sound familiar?</h3>
+      <p>
+        These are the problems we mapped by surveying real small sellers with our team.
+        If <span class="em">any of these feel like yours</span> — reach out.
+        We are building TellOs to solve them at the simplest, cheapest setup we can.
+        Our team is here to help you figure out which ones matter most for your business.
+      </p>
+      <div class="row">
+        <a class="btn btn-green" href="https://wa.me/919094021738?text=Hi%20TellOs%2C%20I%20face%20some%20of%20these%20problems%20-%20can%20we%20talk%3F" target="_blank">
+          <i class="fa-brands fa-whatsapp"></i> Talk To Our Team
+        </a>
+        <a class="btn btn-outline-dark" href="mailto:hirthickprofessional@gmail.com?subject=Some%20of%20these%20problems%20are%20mine">
+          <i class="fa-solid fa-envelope"></i> Email Us
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+  WHAT WE HELP WITH
+════════════════════════════════════════════════════════════ -->
+<section class="block soft" id="features">
+  <div class="container">
+    <div class="section-head fade-in">
+      <span class="eyebrow">Our help</span>
+      <h2>What We Help With</h2>
+      <p class="sub">Six everyday problems we heard from sellers — and what we are building for each.</p>
+    </div>
+
+    <div class="features-grid">
+      <div class="feature fade-in">
+        <div class="fi"><i class="fa-solid fa-boxes-stacked"></i></div>
+        <div class="feature-body">
+          <h3>Stock Tracking</h3>
+          <p>Know what you have, what is running low, and what you sold last week — without opening Excel.</p>
+        </div>
+      </div>
+      <div class="feature fade-in">
+        <div class="fi"><i class="fa-solid fa-chart-line"></i></div>
+        <div class="feature-body">
+          <h3>Profit Clarity</h3>
+          <p>See real profit after courier, returns, and packaging — not just total sales at month end.</p>
+        </div>
+      </div>
+      <div class="feature fade-in">
+        <div class="fi"><i class="fa-solid fa-mobile-screen"></i></div>
+        <div class="feature-body">
+          <h3>Mobile First</h3>
+          <p>Works on the same phone you use for WhatsApp. No new app to learn or install.</p>
+        </div>
+      </div>
+      <div class="feature fade-in">
+        <div class="fi"><i class="fa-solid fa-receipt"></i></div>
+        <div class="feature-body">
+          <h3>Order Management</h3>
+          <p>Find any past order in seconds — by customer, product, or date. No more searching through chats.</p>
+        </div>
+      </div>
+      <div class="feature fade-in">
+        <div class="fi"><i class="fa-solid fa-user-clock"></i></div>
+        <div class="feature-body">
+          <h3>Customer Follow-Up</h3>
+          <p>See who bought what, when, and bring back old customers with a simple message.</p>
+        </div>
+      </div>
+      <div class="feature fade-in">
+        <div class="fi"><i class="fa-solid fa-calendar-check"></i></div>
+        <div class="feature-body">
+          <h3>Season Planning</h3>
+          <p>Know what to stock up for the next sale season — based on what actually sold last year.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="features-cta fade-in">
+      <a href="#contact" class="btn btn-outline-dark">Get In Touch Today</a>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+  TESTIMONIAL
+════════════════════════════════════════════════════════════ -->
+<section class="block">
+  <div class="container">
+    <div class="section-head fade-in">
+      <span class="eyebrow">What sellers say</span>
+      <h2>In Their Own Words</h2>
+    </div>
+
+    <div class="testimonial fade-in">
+      <span class="arrows l"><i class="fa-solid fa-chevron-left"></i></span>
+      <p class="testimonial-quote">
+        "I wake up to 60 WhatsApp messages every morning. By the time<br />
+        I respond to everything, some orders have already been missed."
+      </p>
+      <p class="testimonial-body">
+        TellOs is the first time someone has actually asked us what the problem is,
+        instead of selling us a product. That is the only reason we agreed to talk.
+      </p>
+      <div class="testimonial-attr">
+        <div class="avatar-circle">B</div>
+        <div class="who">
+          <div class="n">BOUTIQUE OWNER</div>
+          <div class="w">Chennai, Tamil Nadu</div>
+        </div>
+      </div>
+      <span class="arrows r"><i class="fa-solid fa-chevron-right"></i></span>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+  CONTACT BAND
+════════════════════════════════════════════════════════════ -->
+<section class="contact-band" id="contact">
+  <div class="container">
+    <h2>Have 15 minutes? Let's Talk.</h2>
+    <p>
+      No pitch. No app to download. We are talking to sellers, listening to problems,
+      and learning what to build — before we build it.
+    </p>
+    <div class="row">
+      <a class="btn btn-green" href="https://wa.me/919094021738?text=Hi%20TellOs%2C%20I%20want%20to%20talk%20about%20my%20business%20problems" target="_blank">
+        <i class="fa-brands fa-whatsapp"></i> WhatsApp Us
+      </a>
+      <a class="btn btn-ghost" href="mailto:hirthickprofessional@gmail.com?subject=I%20want%20to%20discuss%20my%20seller%20problems">
+        <i class="fa-solid fa-envelope"></i> Send An Email
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+  MISSION SPLIT — Dark text panel + Live chatbot phone
+════════════════════════════════════════════════════════════ -->
+<section id="mission" class="mission-split">
+  <div class="mission-left">
+    <div class="head-inline">
+      <h2>Our Mission Is Clear</h2>
+    </div>
+    <p class="highlight">
+      A simpler way to run a small business —<br />
+      built on the tool you already use every day.
+    </p>
+    <p class="body">
+      We are not building enterprise software. We are building for the
+      seller who has 50 products, manages everything alone, and just
+      needs their stock and sales to make sense. Try our assistant on
+      the right — send a message or upload any file you have.
+    </p>
+
+    <div class="demo-ops-panel">
+      <div class="demo-eyebrow">DEMO STAGE</div>
+      <p class="demo-ops-title">What you can try</p>
+      <ul class="demo-ops-list">
+        <li><i class="fa-solid fa-circle-check"></i> Upload <strong>any data file</strong> — Excel, CSV, PDF, photo of a handwritten register, screenshot</li>
+        <li><i class="fa-solid fa-circle-check"></i> Ask questions about what you uploaded <em>("what is my top product?", "how much stock is left?")</em></li>
+        <li><i class="fa-solid fa-circle-check"></i> Open a live dashboard with revenue, profit, dead stock, and reorder alerts</li>
+        <li><i class="fa-solid fa-circle-check"></i> Cancel or re-upload anytime — you stay in control of what gets saved</li>
+      </ul>
+      <p class="demo-note"><em>This is a demo. Some things may feel rough. If something doesn't work — message our team on WhatsApp and we will help you figure it out.</em></p>
+      <a class="demo-wa-link" href="https://wa.me/919094021738?text=Hi%20TellOs%2C%20need%20help%20with%20the%20demo" target="_blank">
+        <i class="fa-brands fa-whatsapp"></i> WhatsApp our team →
+      </a>
+    </div>
+
+    <a href="#contact" class="cta-row">
+      <span class="ico"><i class="fa-solid fa-paper-plane"></i></span>
+      Contact Us For More Info
+    </a>
+  </div>
+
+  <div class="mission-right">
+    <!-- ────── WhatsApp chatbot phone mockup (functional) ────── -->
+    <div class="phone">
+      <div class="status-bar">
+        <span class="status-time" id="clock">10:24</span>
+        <span>📶 🔋</span>
+      </div>
+      <div class="wa-header">
+        <div class="avatar">🤖</div>
+        <div class="contact-info">
+          <div class="contact-name">TellOs Assistant</div>
+          <div class="contact-status" id="bot-status">online</div>
+        </div>
+        <div class="header-icons">
+          <span>📹</span><span>📞</span><span>⋮</span>
+        </div>
+      </div>
+      <div class="chat-area" id="chat-area">
+        <div class="date-divider"><span>Today</span></div>
+      </div>
+      <div class="typing-wrap" id="typing" style="display:none">
+        <div class="typing-bubble">
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+      </div>
+      <div class="input-area">
+        <div class="input-side">
+          <span>😊</span>
+          <label class="attach-label" for="file-input" title="Attach file">📎</label>
+          <input type="file" id="file-input" accept=".xlsx,.xls,.csv,.tsv,.pdf,.txt,.md,.jpg,.jpeg,.png,.gif,.webp,.heic">
+        </div>
+        <textarea
+          id="msg-input"
+          class="msg-input"
+          placeholder="Message"
+          rows="1"
+          onkeydown="handleKey(event)"
+          oninput="resize(this)"
+        ></textarea>
+        <button id="send-btn" class="send-btn" onclick="sendMsg()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+  FOOTER
+════════════════════════════════════════════════════════════ -->
+<footer>
+  <div class="container footer-grid">
+    <div class="footer-col">
+      <a href="#" class="logo"><span class="logo-wrap"><span>TELLOS</span><span class="sub">INVENTORY</span></span></a>
+      <p class="tagline">A simpler way to manage your small business. Built for early-stage sellers who need tools that actually work — research phase.</p>
+    </div>
+    <div class="footer-col">
+      <h5>Quick Links</h5>
+      <a href="#home">Home</a>
+      <a href="#solutions">Solutions</a>
+      <a href="#mission">Mission</a>
+      <a href="#features">What We Help With</a>
+      <a href="#contact">Contact</a>
+    </div>
+    <div class="footer-col">
+      <h5>Reach Us</h5>
+      <a class="contact-row" href="https://wa.me/919094021738" target="_blank"><i class="fa-brands fa-whatsapp"></i> +91 9094021738</a>
+      <a class="contact-row" href="mailto:hirthickprofessional@gmail.com"><i class="fa-solid fa-envelope"></i> hirthickprofessional@gmail.com</a>
+      <a class="contact-row" href="https://www.instagram.com/heishirthick" target="_blank"><i class="fa-brands fa-instagram"></i> @heishirthick</a>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <span>© 2026 TellOs · Research phase · No product for sale yet</span>
+    <span>Made in India <i class="fa-solid fa-heart heart"></i></span>
+  </div>
+</footer>
+
+<!-- floating WhatsApp button -->
+<a class="wa-float" href="https://wa.me/919094021738?text=Hi%20TellOs!" target="_blank" title="Chat on WhatsApp">
   <svg width="30" height="30" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
 </a>
-<div class="wa-float-tooltip">Chat with ShopBot on WhatsApp →</div>
-
-<div class="page-wrap">
-
-<!-- Banner: Try on WhatsApp -->
-<div class="wa-banner">
-  <div class="wa-banner-icon">📱</div>
-  <div class="wa-banner-text">
-    <div class="wa-banner-title">Try ShopBot on WhatsApp</div>
-    <div class="wa-banner-sub">Send your Excel data directly from WhatsApp</div>
-  </div>
-  <a class="wa-banner-btn" href="https://wa.me/15556592233?text=Hi%20ShopBot!" target="_blank">Open Chat</a>
-</div>
-
-
-  <!-- Status Bar -->
-  <div class="status-bar">
-    <span class="status-time" id="clock">10:24</span>
-    <span>📶 🔋</span>
-  </div>
-
-  <!-- Header -->
-  <div class="wa-header">
-    <div class="avatar">🤖</div>
-    <div class="contact-info">
-      <div class="contact-name">ShopBot</div>
-      <div class="contact-status" id="bot-status">online</div>
-    </div>
-    <div class="header-icons">
-      <span>📹</span><span>📞</span><span>⋮</span>
-    </div>
-  </div>
-
-  <!-- Messages -->
-  <div class="chat-area" id="chat-area">
-    <div class="date-divider"><span>Today</span></div>
-  </div>
-
-  <!-- Typing indicator (hidden by default) -->
-  <div class="typing-wrap" id="typing" style="display:none">
-    <div class="typing-bubble">
-      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-    </div>
-  </div>
-
-  <!-- Input -->
-  <div class="input-area">
-    <div class="input-side">
-      <span>😊</span>
-      <label class="attach-label" for="file-input" title="Attach file">📎</label>
-      <input type="file" id="file-input" accept=".xlsx,.xls,.csv,.jpg,.jpeg,.png,.gif,.webp">
-    </div>
-    <textarea
-      id="msg-input"
-      class="msg-input"
-      placeholder="Message"
-      rows="1"
-      onkeydown="handleKey(event)"
-      oninput="resize(this)"
-    ></textarea>
-    <button id="send-btn" class="send-btn" onclick="sendMsg()">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-      </svg>
-    </button>
-  </div>
-</div>
 
 <!-- Upload progress overlay -->
 <div class="upload-overlay" id="upload-overlay">
@@ -459,10 +1939,67 @@
     </div>
   </div>
 </div>
-</div><!-- /page-wrap -->
 
 <script>
-// ── Session & State ──────────────────────────────────────
+// ════════════════════════════════════════════════════════════
+//  MOBILE MENU
+// ════════════════════════════════════════════════════════════
+const menu = document.getElementById('mobileMenu');
+document.getElementById('navToggle').addEventListener('click', () => menu.classList.add('open'));
+document.getElementById('navClose').addEventListener('click', () => menu.classList.remove('open'));
+menu.querySelectorAll('.mlink').forEach(a => a.addEventListener('click', () => menu.classList.remove('open')));
+
+// ════════════════════════════════════════════════════════════
+//  SCROLL FADE-IN
+// ════════════════════════════════════════════════════════════
+const fadeObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.classList.add('visible');
+      fadeObserver.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.12 });
+document.querySelectorAll('.fade-in').forEach(el => fadeObserver.observe(el));
+
+// ════════════════════════════════════════════════════════════
+//  HERO SLIDER (3 slides, clickable dots, auto-advance)
+// ════════════════════════════════════════════════════════════
+(function () {
+  const slides = document.querySelectorAll('.hero-slide');
+  const dots   = document.querySelectorAll('#heroDots button');
+  if (!slides.length || !dots.length) return;
+
+  let idx = 0;
+  let timer = null;
+
+  function show(n) {
+    idx = (n + slides.length) % slides.length;
+    slides.forEach((s, i) => s.classList.toggle('on', i === idx));
+    dots.forEach((d, i) => d.classList.toggle('on', i === idx));
+  }
+  function next() { show(idx + 1); }
+  function start() { stop(); timer = setInterval(next, 7000); }
+  function stop()  { if (timer) clearInterval(timer); timer = null; }
+
+  dots.forEach(d => d.addEventListener('click', () => {
+    show(parseInt(d.dataset.go, 10));
+    start(); // restart timer after manual selection
+  }));
+
+  // pause on hover so reading isn't interrupted
+  const hero = document.querySelector('.hero');
+  if (hero) {
+    hero.addEventListener('mouseenter', stop);
+    hero.addEventListener('mouseleave', start);
+  }
+
+  start();
+})();
+
+// ════════════════════════════════════════════════════════════
+//  CHATBOT — SESSION + STATE  (preserved logic, unchanged)
+// ════════════════════════════════════════════════════════════
 const SESSION_KEY = 'shopbot_session_id';
 let SESSION_ID = localStorage.getItem(SESSION_KEY);
 if (!SESSION_ID) {
@@ -472,7 +2009,6 @@ if (!SESSION_ID) {
 
 let isBusy = false;
 
-// ── Clock ─────────────────────────────────────────────────
 function updateClock() {
   const n = new Date();
   document.getElementById('clock').textContent =
@@ -486,7 +2022,6 @@ function nowTime() {
   return String(n.getHours()).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0');
 }
 
-// ── Render a single message ──────────────────────────────
 function renderMessage(msg) {
   const area = document.getElementById('chat-area');
   const wrap = document.createElement('div');
@@ -498,7 +2033,6 @@ function renderMessage(msg) {
   const time = nowTime();
 
   if (msg.type === 'image' && msg.dataUrl) {
-    // Image message
     const img = document.createElement('img');
     img.src = msg.dataUrl;
     img.className = 'bubble-img';
@@ -506,22 +2040,31 @@ function renderMessage(msg) {
     img.onclick = () => window.open(msg.dataUrl, '_blank');
     bubble.appendChild(img);
   } else if (msg.type === 'file') {
-    // File attachment
+    const ext = (msg.name || '').split('.').pop().toLowerCase();
+    const fileIcon = ['pdf'].includes(ext) ? '📄' : ['jpg','jpeg','png','gif','webp','heic'].includes(ext) ? '📷' : '📊';
     const fileDiv = document.createElement('div');
     fileDiv.className = 'file-bubble';
-    fileDiv.innerHTML = `<span class="file-icon">📊</span>
+    fileDiv.innerHTML = `<span class="file-icon">${escHtml(fileIcon)}</span>
       <div><div class="file-name">${escHtml(msg.name || 'File')}</div>
-      <div class="file-size">Excel spreadsheet</div></div>`;
+      <div class="file-size">Uploaded file</div></div>`;
     bubble.appendChild(fileDiv);
   } else {
-    // Text message
     const textDiv = document.createElement('div');
     textDiv.className = 'bubble-text';
-    textDiv.textContent = msg.text || '';
+    if (msg.role === 'bot' && msg.text) {
+      // WhatsApp-style markdown: escape HTML first, then render **bold** and *italic*
+      const escaped = escHtml(msg.text);
+      const rendered = escaped
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*([^*\n]+?)\*/g, '<em>$1</em>')
+        .replace(/\n/g, '<br>');
+      textDiv.innerHTML = rendered;
+    } else {
+      textDiv.textContent = msg.text || '';
+    }
     bubble.appendChild(textDiv);
   }
 
-  // Dashboard card
   if (msg.dashboardUrl) {
     const card = document.createElement('a');
     card.href = msg.dashboardUrl;
@@ -533,16 +2076,14 @@ function renderMessage(msg) {
     bubble.appendChild(card);
   }
 
-  // Upload hint for bot messages asking for file
-  if (msg.role === 'bot' && msg.text && /upload|excel|xlsx|file|attach|spreadsheet/i.test(msg.text)) {
+  if (msg.suggestUpload) {
     const hint = document.createElement('div');
     hint.className = 'upload-hint';
-    hint.textContent = '📎 Tap the paperclip to attach your Excel file';
+    hint.textContent = '📎 Tap the paperclip to attach your file';
     hint.onclick = () => document.getElementById('file-input').click();
     bubble.appendChild(hint);
   }
 
-  // Time
   const timeDiv = document.createElement('div');
   timeDiv.className = 'bubble-time';
   timeDiv.innerHTML = time + (msg.role === 'user' ? ' <span class="tick">✓✓</span>' : '');
@@ -562,21 +2103,18 @@ function escHtml(t) {
   return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// ── Typing indicator ─────────────────────────────────────
 function setTyping(show) {
   document.getElementById('typing').style.display = show ? 'flex' : 'none';
   document.getElementById('bot-status').textContent = show ? 'typing...' : 'online';
   if (show) scrollToBottom();
 }
 
-// ── setBusy helper ────────────────────────────────────────
 function setBusy(v) {
   isBusy = v;
   document.getElementById('send-btn').disabled = v;
   document.getElementById('msg-input').disabled = v;
 }
 
-// ── Send text message ─────────────────────────────────────
 async function sendMsg() {
   const input = document.getElementById('msg-input');
   const text = input.value.trim();
@@ -611,9 +2149,9 @@ async function sendMsg() {
       role: 'bot',
       text: data.reply,
       dashboardUrl: data.dashboardUrl || null,
+      suggestUpload: !!data.suggestUpload,
     });
 
-    // P3: If server started async streaming insert, poll for completion
     if (data.processing) {
       startUploadPolling();
     }
@@ -626,21 +2164,13 @@ async function sendMsg() {
   }
 }
 
-// ── File upload ────────────────────────────────────────────
 document.getElementById('file-input').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file || isBusy) return;
-  e.target.value = ''; // reset input
+  e.target.value = '';
 
-  const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name);
-  const isExcel = /\.(xlsx|xls|csv)$/i.test(file.name);
+  const isImage = /\.(jpg|jpeg|png|gif|webp|heic)$/i.test(file.name);
 
-  if (!isImage && !isExcel) {
-    renderMessage({ role: 'bot', text: '⚠️ Please upload an Excel file (.xlsx, .xls, .csv) or an image.' });
-    return;
-  }
-
-  // For images, show preview immediately in chat
   if (isImage) {
     const reader = new FileReader();
     reader.onload = (ev) => {
@@ -648,11 +2178,9 @@ document.getElementById('file-input').addEventListener('change', async (e) => {
     };
     reader.readAsDataURL(file);
   } else {
-    // Show file bubble
     renderMessage({ role: 'user', type: 'file', name: file.name });
   }
 
-  // Show upload overlay
   document.getElementById('upload-name').textContent = file.name;
   document.getElementById('upload-overlay').classList.add('show');
   document.getElementById('progress-fill').style.width = '0%';
@@ -660,7 +2188,6 @@ document.getElementById('file-input').addEventListener('change', async (e) => {
   setBusy(true);
   setTyping(true);
 
-  // Fake progress animation
   let pct = 0;
   const ticker = setInterval(() => {
     pct = Math.min(pct + 10, 80);
@@ -679,7 +2206,7 @@ document.getElementById('file-input').addEventListener('change', async (e) => {
     if (!res.ok) throw new Error('Upload failed: ' + res.status);
     const data = await res.json();
 
-    await new Promise(r => setTimeout(r, 400)); // brief pause for UX
+    await new Promise(r => setTimeout(r, 400));
     document.getElementById('upload-overlay').classList.remove('show');
     setTyping(false);
     setBusy(false);
@@ -705,7 +2232,6 @@ document.getElementById('file-input').addEventListener('change', async (e) => {
   }
 });
 
-// ── Keyboard shortcut ─────────────────────────────────────
 function handleKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -718,13 +2244,10 @@ function resize(el) {
   el.style.height = Math.min(el.scrollHeight, 120) + 'px';
 }
 
-// ── P3: Poll upload completion status ──────────────────────
-// Polls /api/upload-status/:sessionId every 1.5s after async insert starts.
-// Shows live row progress in status bar, then the done message+dashboard card.
 let _uploadPollTimer = null;
 
 function startUploadPolling() {
-  if (_uploadPollTimer) return; // already polling
+  if (_uploadPollTimer) return;
   document.getElementById('bot-status').textContent = 'processing data...';
 
   _uploadPollTimer = setInterval(async () => {
@@ -737,11 +2260,9 @@ function startUploadPolling() {
         _uploadPollTimer = null;
         document.getElementById('bot-status').textContent = 'online';
 
-        // Fetch latest session messages — the done notification is there
         const msgRes  = await fetch('/session/' + SESSION_ID + '/messages');
         const msgData = await msgRes.json();
         if (msgData.messages && msgData.messages.length > 0) {
-          // Render the last bot message (has the dashboard card)
           const lastBot = [...msgData.messages].reverse().find(m => m.role === 'bot' && m.dashboardUrl);
           if (lastBot) {
             renderMessage(lastBot);
@@ -758,15 +2279,13 @@ function startUploadPolling() {
         renderMessage({ role: 'bot', text: '❌ Data save failed: ' + (data.error || 'unknown error. Please try again.') });
 
       } else if (data.status === 'processing' && data.total > 0) {
-        // Live row count in the header status bar
         const pct = Math.round((data.inserted / data.total) * 100);
         document.getElementById('bot-status').textContent = `saving... ${data.inserted}/${data.total} rows (${pct}%)`;
       }
-    } catch (_) {} // polling must never crash
+    } catch (_) {}
   }, 1500);
 }
 
-// ── Restore session messages from server ──────────────────
 async function restoreSession() {
   try {
     const res = await fetch('/session/' + SESSION_ID + '/messages');
@@ -780,18 +2299,15 @@ async function restoreSession() {
   return false;
 }
 
-// ── Initial greeting ──────────────────────────────────────
 async function init() {
   setBusy(true);
   setTyping(true);
 
-  // Restore previous session first
   const restored = await restoreSession();
   if (restored) {
     setTyping(false);
     setBusy(false);
 
-    // Resume polling if a page refresh happened mid-upload
     try {
       const statusRes  = await fetch('/api/upload-status/' + SESSION_ID);
       const statusData = await statusRes.json();
@@ -803,7 +2319,6 @@ async function init() {
     return;
   }
 
-  // Fresh session — send greeting
   try {
     const res = await fetch('/chat', {
       method: 'POST',
@@ -815,19 +2330,20 @@ async function init() {
     setBusy(false);
     renderMessage({
       role: 'bot',
-      text: data.reply || "👋 Hi! I'm ShopBot, your ecommerce assistant. How can I help?",
+      text: data.reply || "👋 Hi! I'm TellOs, your inventory assistant. How can I help?",
     });
   } catch {
     setTyping(false);
     setBusy(false);
     renderMessage({
       role: 'bot',
-      text: "👋 Hi! I'm ShopBot.\n\n⚠️ Please make sure the backend is running:\n\nnode server.js",
+      text: "👋 Hi! I'm TellOs.\n\n⚠️ Please make sure the backend is running:\n\nnode server.js",
     });
   }
 }
 
 window.addEventListener('load', init);
 </script>
+
 </body>
 </html>

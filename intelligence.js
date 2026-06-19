@@ -1,8 +1,30 @@
-// intelligence.js — NVIDIA NIM Intelligence Layer
-// Uses Mixture of Experts (MoE) model to identify intent, map queries, and generate insights.
+// intelligence.js — NVIDIA NIM Intelligence Layer + Gemini 2.5 Flash for Document Understanding
+// - buildQueryPlan, generateDatasetInsights: Llama 3.1 70B via NVIDIA NIM
+//   (Retained for high-accuracy structured JSON generation; column-name hallucination risk is high on smaller models)
+// - inferDatasetSchema, extractTableFromImage: Gemini 2.5 Flash
+//   (Runs only on file upload, at most once per session → stays within free quota of 20 req/day)
 
 require('dotenv').config();
+const https = require('https');
 const axios = require('axios');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+
+// ─── Gemini client (for schema inference & OCR only) ───────────────────────────────────
+// Reserved for document upload events only — NOT intent classification.
+// Free tier: ~20 requests/day → acceptable since uploads are rare.
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const GEMINI_SCHEMA_MODEL = 'gemini-2.5-flash'; // Reserved for OCR + schema inference only
+
+
+
+// ─── Persistent keep-alive HTTPS agent for all Axios NIM calls ───────────────────
+// Reuses TCP/TLS connections to integrate.api.nvidia.com, saving ~150-200ms
+// of handshake overhead on schema inference, query planning, and insight calls.
+const nimKeepAliveAgent = new https.Agent({
+  keepAlive:      true,
+  maxSockets:     20,
+  keepAliveMsecs: 60_000,
+});
 
 /**
  * Call NVIDIA NIM hosted API
@@ -37,6 +59,7 @@ async function callNvidiaNIM(messages, systemPrompt = '') {
           'Content-Type': 'application/json',
         },
         timeout: 45000,
+        httpsAgent: nimKeepAliveAgent,   // reuse TCP connections
       }
     );
     return response.data?.choices?.[0]?.message?.content || '';
@@ -164,74 +187,33 @@ Return ONLY the JSON object. Do not include markdown code block syntax (like \`\
   }
 }
 
-async function callNvidiaNIMVision(imageBuffer, mimeType, prompt) {
-  const apiKey = process.env.NIM_KEY;
-  if (!apiKey || apiKey.startsWith('your_')) {
-    throw new Error('NIM_KEY not configured in .env');
-  }
-
-  const model = 'nvidia/llama-3.1-nemotron-nano-vl-8b-v1';
-  const url = 'https://integrate.api.nvidia.com/v1/chat/completions';
-  
-  // Note: Integrate API URL is integrate.api.nvidia.com/v1
-  const targetUrl = 'https://integrate.api.nvidia.com/v1/chat/completions';
-
-  const base64Image = imageBuffer.toString('base64');
-  const imageUrl = `data:${mimeType};base64,${base64Image}`;
-
-  const payload = {
-    model: model,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: prompt
-          },
-          {
-            type: 'image_url',
-            image_url: {
-              url: imageUrl
-            }
-          }
-        ]
-      }
-    ],
-    max_tokens: 4096,
-    temperature: 0.1
-  };
-
-  try {
-    const response = await axios.post(
-      targetUrl,
-      payload,
-      {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        timeout: 60000, // Vision requests might take longer
-      }
-    );
-    return response.data?.choices?.[0]?.message?.content || '';
-  } catch (error) {
-    console.error('NVIDIA NIM Vision API Error:', error.response?.data || error.message);
-    throw error;
-  }
-}
-
 /**
- * Image table extraction using Llama Nemotron Nano VL
+ * extractTableFromImage — powered by Gemini 2.5 Flash multimodal
+ *
+ * Consumes one Gemini request per image upload. Returns structured JSON
+ * with tableName, columns, detectedConcepts, and rows.
  */
 async function extractTableFromImage(imageBuffer, mimeType) {
-  // Quality enhancement step: Log and print (can perform buffer conversion if needed)
-  console.log(`🖼️ [OCR] Quality enhancement pass for ${mimeType} image...`);
-  
-  const prompt = `You are a structured data extraction expert. Analyze the attached image containing a table, ledger, register, spreadsheet screenshot, invoice, or receipt.
-Extract the columns and all rows of data. 
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey.startsWith('your_')) {
+    throw new Error('GEMINI_API_KEY not configured in .env for image OCR');
+  }
 
-Return your output as a valid JSON object matching this schema. Do not include markdown code block syntax (like \`\`\`json) or extra text:
+  console.log(`🖼️ [OCR] Sending image to Gemini 2.5 Flash for table extraction (${mimeType})...`);
+
+  const model = genAI.getGenerativeModel({
+    model: GEMINI_SCHEMA_MODEL,
+    generationConfig: {
+      responseMimeType: 'application/json',
+      temperature: 0.0,
+      maxOutputTokens: 4096,
+    },
+  });
+
+  const prompt = `You are a structured data extraction expert. Analyze the attached image containing a table, ledger, register, spreadsheet screenshot, invoice, or receipt.
+Extract the columns and all rows of data.
+
+Return your output as a valid JSON object matching this schema. Do not include markdown or extra text:
 {
   "tableName": "A suitable name for this dataset (e.g. Sales Register, Inventory List, Products)",
   "columns": ["Col1", "Col2", ...],
@@ -239,55 +221,73 @@ Return your output as a valid JSON object matching this schema. Do not include m
   "rows": [
     {
       "Col1": "Value1",
-      "Col2": 12.34,
-      ...
+      "Col2": 12.34
     }
   ]
 }
 
 Ensure all extracted row values are mapped to the correct columns. Do not truncate rows.
-Return ONLY the raw JSON object. Do not include any conversational explanation before or after.`;
+Return ONLY the raw JSON object.`;
+
+  const base64Image = imageBuffer.toString('base64');
 
   try {
-    const raw = await callNvidiaNIMVision(imageBuffer, mimeType, prompt);
+    const result = await model.generateContent([
+      { text: prompt },
+      { inlineData: { mimeType, data: base64Image } },
+    ]);
+    const raw = result.response.text().trim();
     const clean = raw.replace(/```json/g, '').replace(/```/g, '').trim();
-    
-    // Extract JSON object if model outputs surrounding text
+
     const jsonStart = clean.indexOf('{');
-    const jsonEnd = clean.lastIndexOf('}');
-    const jsonStr = (jsonStart >= 0 && jsonEnd > jsonStart) ? clean.slice(jsonStart, jsonEnd + 1) : clean;
-    
+    const jsonEnd   = clean.lastIndexOf('}');
+    const jsonStr   = (jsonStart >= 0 && jsonEnd > jsonStart) ? clean.slice(jsonStart, jsonEnd + 1) : clean;
+
     const parsed = JSON.parse(jsonStr);
+    console.log(`✅ [OCR] Gemini extracted ${parsed.columns?.length || 0} columns, ${parsed.rows?.length || 0} rows.`);
     return parsed;
   } catch (err) {
-    console.error('NIM Vision table extraction failed:', err.message);
+    console.error('Gemini Vision table extraction failed:', err.message);
     throw err;
   }
 }
 
 /**
- * Function 1: Infer Dataset Schema using LLM (NVIDIA NIM)
- * Analyzes filename, columns, and sample rows to categorize fields semantically and check relationships.
+ * inferDatasetSchema — powered by Gemini 2.5 Flash (JSON mode)
  *
- * @param {string} fileName - The name of the file
- * @param {string[]} columns - The array of detected column headers
+ * Analyzes filename, columns, and sample rows to categorize fields semantically.
+ * Consumes one Gemini request per Excel/CSV upload.
+ *
+ * @param {string}   fileName   - The name of the file
+ * @param {string[]} columns    - Array of detected column headers
  * @param {object[]} sampleRows - Sample rows from the dataset
- * @returns {Promise<object>} - Dataset profile containing schema mapping and confidence
+ * @returns {Promise<object>}   - Dataset profile with schema mapping and confidence
  */
 async function inferDatasetSchema(fileName, columns, sampleRows) {
-  const apiKey = process.env.NIM_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey.startsWith('your_')) {
-    throw new Error('NIM_KEY not configured in .env');
+    throw new Error('GEMINI_API_KEY not configured in .env for schema inference');
   }
 
-  const systemPrompt = `You are a database architect powered by a Mixture of Experts model.
+  console.log(`🧠 [SCHEMA] Sending to Gemini 2.5 Flash for schema inference: ${fileName}`);
+
+  const model = genAI.getGenerativeModel({
+    model: GEMINI_SCHEMA_MODEL,
+    generationConfig: {
+      responseMimeType: 'application/json',
+      temperature: 0.0,
+      maxOutputTokens: 2048,
+    },
+  });
+
+  const systemInstruction = `You are a database architect.
 Analyze the file name, columns, and sample rows of a dataset to determine its schema profile.
 Categorize all fields into dimensions and measures. Identify their type and semantic roles.
 
-Return a JSON object matching this schema. Do not include markdown code block syntax (like \`\`\`json) or extra text:
+Return a JSON object matching this schema. Do not include markdown or extra text:
 {
   "datasetType": "general name of the domain/type (e.g. hospital_records, payroll_data, sales_orders)",
-  "confidence": 0.95, // Score between 0.0 and 1.0 indicating clarity of domain
+  "confidence": 0.95,
   "description": "A 1-2 sentence description of what this dataset contains and represents.",
   "entities": ["list of primary entity concepts present, e.g. products, customers, orders"],
   "relationships": [
@@ -316,20 +316,20 @@ Return a JSON object matching this schema. Do not include markdown code block sy
   ]
 }
 
-Ensure every column in the input array appears in "schemaProfile.columns" and is classified in either "schemaProfile.measures" or "schemaProfile.dimensions".`;
+Ensure every column in the input array appears in \"schemaProfile.columns\" and is classified in either \"schemaProfile.measures\" or \"schemaProfile.dimensions\".`;
 
   const userContent = `File: "${fileName}"\nColumns: ${JSON.stringify(columns)}\nSample Rows: ${JSON.stringify(sampleRows.slice(0, 3))}`;
 
   try {
-    const raw = await callNvidiaNIM(
-      [{ role: 'user', content: userContent }],
-      systemPrompt
-    );
+    const result = await model.generateContent([
+      { text: systemInstruction + '\n\n' + userContent },
+    ]);
+    const raw = result.response.text().trim();
     const clean = raw.replace(/```json/g, '').replace(/```/g, '').trim();
     const jsonStart = clean.indexOf('{');
-    const jsonEnd = clean.lastIndexOf('}');
-    const jsonStr = (jsonStart >= 0 && jsonEnd > jsonStart) ? clean.slice(jsonStart, jsonEnd + 1) : clean;
-    const profile = JSON.parse(jsonStr);
+    const jsonEnd   = clean.lastIndexOf('}');
+    const jsonStr   = (jsonStart >= 0 && jsonEnd > jsonStart) ? clean.slice(jsonStart, jsonEnd + 1) : clean;
+    const profile   = JSON.parse(jsonStr);
 
     // --- Validation Checks ---
     if (!profile.relationships) profile.relationships = [];
@@ -464,10 +464,130 @@ Ensure every column in the input array appears in "schemaProfile.columns" and is
   }
 }
 
+/**
+ * warmupGemini — send a lightweight ping to Gemini 2.5 Flash at server start.
+ * Pre-resolves DNS and establishes the HTTPS connection, eliminating cold-start
+ * delay on the first real upload request.
+ */
+async function warmupGemini() {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey.startsWith('your_')) return 'Gemini ⚠️ (no key)';
+  try {
+    const model = genAI.getGenerativeModel({ model: GEMINI_SCHEMA_MODEL });
+    const result = await model.generateContent('Reply with one word: READY');
+    const text = result.response.text().trim();
+    return text ? `Gemini 2.5 Flash ✅` : 'Gemini ⚠️ (empty response)';
+  } catch (e) {
+    return `Gemini ❌ (${e.message})`;
+  }
+}
+
+/**
+ * extractTableFromDocument — Gemini 2.5 Flash multimodal for PDF files.
+ * Uses the same output schema as extractTableFromImage so the upload pipeline is identical.
+ */
+async function extractTableFromDocument(buffer, mimeType) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey.startsWith('your_')) {
+    throw new Error('GEMINI_API_KEY not configured for document parsing');
+  }
+
+  console.log(`📄 [DOC-PARSE] Sending ${mimeType} to Gemini 2.5 Flash...`);
+
+  const model = genAI.getGenerativeModel({
+    model: GEMINI_SCHEMA_MODEL,
+    generationConfig: { responseMimeType: 'application/json', temperature: 0.0, maxOutputTokens: 4096 },
+  });
+
+  const prompt = `You are a structured data extraction expert. Analyze this document and extract any tabular data you find.
+
+Return your output as a valid JSON object matching this schema exactly:
+{
+  "tableName": "A suitable name for this dataset",
+  "columns": ["Col1", "Col2", ...],
+  "detectedConcepts": ["products", "orders", "inventory", "payments", "sales"],
+  "rows": [{"Col1": "Value1", "Col2": 12.34}]
+}
+
+If there are multiple tables, extract the most data-rich one. If no tabular data exists, return:
+{"tableName": "No Table Found", "columns": [], "detectedConcepts": [], "rows": []}
+
+Return ONLY the raw JSON object. No markdown. No explanation.`;
+
+  const base64Data = buffer.toString('base64');
+
+  try {
+    const result = await model.generateContent([
+      { text: prompt },
+      { inlineData: { mimeType, data: base64Data } },
+    ]);
+    const raw = result.response.text().trim();
+    const clean = raw.replace(/```json/g, '').replace(/```/g, '').trim();
+    const jsonStart = clean.indexOf('{');
+    const jsonEnd   = clean.lastIndexOf('}');
+    const jsonStr   = (jsonStart >= 0 && jsonEnd > jsonStart) ? clean.slice(jsonStart, jsonEnd + 1) : clean;
+    const parsed = JSON.parse(jsonStr);
+    console.log(`✅ [DOC-PARSE] Extracted ${parsed.columns?.length || 0} columns, ${parsed.rows?.length || 0} rows.`);
+    return parsed;
+  } catch (err) {
+    console.error('Document parse failed:', err.message);
+    throw err;
+  }
+}
+
+/**
+ * extractTableFromText — extract tabular data from plain text content.
+ */
+async function extractTableFromText(textContent, fileName) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey.startsWith('your_')) {
+    throw new Error('GEMINI_API_KEY not configured for text parsing');
+  }
+
+  const model = genAI.getGenerativeModel({
+    model: GEMINI_SCHEMA_MODEL,
+    generationConfig: { responseMimeType: 'application/json', temperature: 0.0, maxOutputTokens: 4096 },
+  });
+
+  const prompt = `You are a structured data extraction expert. Analyze this text content from the file "${fileName}" and extract any tabular or structured data.
+
+Return your output as a valid JSON object:
+{
+  "tableName": "A suitable name for this dataset",
+  "columns": ["Col1", "Col2", ...],
+  "detectedConcepts": ["products", "orders", "inventory", "payments", "sales"],
+  "rows": [{"Col1": "Value1", "Col2": 12.34}]
+}
+
+If no tabular data exists, return:
+{"tableName": "No Table Found", "columns": [], "detectedConcepts": [], "rows": []}
+
+TEXT CONTENT:
+${textContent.slice(0, 8000)}
+
+Return ONLY the raw JSON object. No markdown. No explanation.`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const raw = result.response.text().trim();
+    const clean = raw.replace(/```json/g, '').replace(/```/g, '').trim();
+    const jsonStart = clean.indexOf('{');
+    const jsonEnd   = clean.lastIndexOf('}');
+    const jsonStr   = (jsonStart >= 0 && jsonEnd > jsonStart) ? clean.slice(jsonStart, jsonEnd + 1) : clean;
+    return JSON.parse(jsonStr);
+  } catch (err) {
+    console.error('Text extraction failed:', err.message);
+    throw err;
+  }
+}
+
 module.exports = {
   callNvidiaNIM,
   buildQueryPlan,
   generateDatasetInsights,
   extractTableFromImage,
+  extractTableFromDocument,
+  extractTableFromText,
   inferDatasetSchema,
+  warmupGemini,
 };

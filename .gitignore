@@ -6,3 +6,13 @@ uploads/
 .wa-auth/
 sample-store-data.xlsx
 research/
+
+# Local IDE / tooling config
+.claude/
+
+# Large media assets — serve from CDN or local only
+public/media/
+
+# Session walkthrough docs generated during development
+walkthrough.md
+implementation_plan.md
