@@ -9,11 +9,12 @@ const { connect }    = require('./db');
 const cache = new Map();
 
 // ─── Default session shape ────────────────────────────────────────────────
-function defaultSession(sessionId, phoneNumber = null, channel = 'web') {
+function defaultSession(sessionId, phoneNumber = null, channel = 'web', sessionKey = null) {
   return {
     sessionId,                  // UUID — also the dashboardId
     phoneNumber,                // null for web UI, phone number for WhatsApp
     channel,                    // 'web' | 'whatsapp'
+    sessionKey,                 // Generic lookup key: `${channel}:${rawId}`, e.g. 'whatsapp:919999'
     history:        [],         // Gemini chat history (capped at 20 turns)
     messages:       [],         // Full message log for web UI
     awaitingUpload: false,
@@ -71,30 +72,43 @@ async function getSession(sessionId) {
   return session;
 }
 
-// ─── Get or create session by phone number (WhatsApp) ────────────────────
-// Ensures one persistent session per phone number across restarts
-async function getSessionByPhone(phoneNumber) {
-  // Check in-memory cache first
+// ─── Get or create session by generic platform key ───────────────────────
+// Primary lookup path. sessionKey format: `${channel}:${rawId}`
+// e.g. 'whatsapp:919999999999', 'telegram:user123'
+//
+// channel  — platform identifier string ('whatsapp', 'telegram', etc.)
+// rawId    — the platform-native sender ID (phone number, user ID, etc.)
+//            stored in `phoneNumber` for backward compat with WhatsApp callers
+async function getSessionByKey(sessionKey, channel, rawId) {
+  // 1. In-memory cache check
   for (const s of cache.values()) {
-    if (s.phoneNumber === phoneNumber) return s;
+    if (s.sessionKey === sessionKey) return s;
   }
 
-  // Check MongoDB
+  // 2. MongoDB lookup by sessionKey index
   try {
     const db  = await connect();
-    const doc = await db.collection('conversations').findOne({ phoneNumber });
+    const doc = await db.collection('conversations').findOne({ sessionKey });
     if (doc) {
       cache.set(doc.sessionId, doc);
       return doc;
     }
   } catch {}
 
-  // New WhatsApp session — UUID becomes their dashboard ID
+  // 3. New session — UUID becomes the dashboard ID
   const sessionId = randomUUID();
-  const session   = defaultSession(sessionId, phoneNumber, 'whatsapp');
+  // phoneNumber carries rawId so all existing WhatsApp reply paths keep working
+  const session   = defaultSession(sessionId, rawId, channel, sessionKey);
   cache.set(sessionId, session);
   saveToDB(session);
   return session;
+}
+
+// ─── Get or create session by phone number (WhatsApp) ────────────────────
+// Retained for full backward compatibility — all existing callers continue
+// to work without modification. Internally delegates to getSessionByKey.
+async function getSessionByPhone(phoneNumber) {
+  return getSessionByKey(`whatsapp:${phoneNumber}`, 'whatsapp', phoneNumber);
 }
 
 // ─── Persist session state changes ───────────────────────────────────────
@@ -116,4 +130,4 @@ function newSessionId() {
   return randomUUID();
 }
 
-module.exports = { getSession, getSessionByPhone, persistSession, newSessionId, cache };
+module.exports = { getSession, getSessionByPhone, getSessionByKey, persistSession, newSessionId, cache };

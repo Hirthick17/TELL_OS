@@ -35,7 +35,7 @@ async function callNvidiaNIM(messages, systemPrompt = '') {
     throw new Error('NIM_KEY not configured in .env');
   }
 
-  const model = 'meta/llama-3.1-70b-instruct';
+  const model = 'meta/llama-3.3-70b-instruct';
   const url = 'https://integrate.api.nvidia.com/v1/chat/completions';
 
   const formattedMessages = [];

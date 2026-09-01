@@ -155,103 +155,139 @@ function resolveAnalyticsIntent(message) {
 // Converts raw MongoDB aggregation results into WhatsApp-friendly reply strings.
 // Returns null for intents that need Gemini (e.g. growth_advice).
 
-function formatAnalyticsReply(intent_id, data) {
+const { formatForWhatsApp } = require('./formatters/whatsapp-formatter');
+
+// ─── Platform-neutral structured data builder ─────────────────────────────
+// Returns { title: string, rows: [{ label, value }] } — NO markup, NO emojis.
+// All data-computation logic is identical to the original formatAnalyticsReply.
+// Returns null for intents that delegate to Gemini (growth_advice, unknown).
+
+function buildAnalyticsData(intent_id, data) {
   switch (intent_id) {
 
     case 'top_products': {
       if (!data || data.length === 0)
-        return '📦 No product sales data yet. Upload your orders Excel to see top sellers!';
-      const list = data.slice(0, 5).map((p, i) =>
-        `${i + 1}. ${p.name || p.product_name || 'Unknown'} — ${p.totalSold || p.count || 0} sold`
-      ).join('\n');
-      return `📦 *Top Products:*\n${list}`;
+        return { title: 'Top Products', rows: [], empty: true, emptyMessage: 'No product sales data yet. Upload your orders Excel to see top sellers!' };
+      const rows = data.slice(0, 5).map((p, i) => ({
+        label: `${i + 1}. ${p.name || p.product_name || 'Unknown'}`,
+        value: `${p.totalSold || p.count || 0} sold`,
+      }));
+      return { title: 'Top Products', rows };
     }
 
     case 'low_stock': {
       if (!data || data.length === 0)
-        return '✅ All items are above their reorder levels. Stock looks healthy!';
-      const list = data.slice(0, 6).map(p =>
-        `⚠️ ${p.product_name || p.name} — ${p.stock_quantity} left (reorder at ${p.reorder_level ?? '—'})`
-      ).join('\n');
-      return `🔴 *Low Stock Alert (${data.length} items):*\n${list}`;
+        return { title: 'Low Stock', rows: [], empty: true, emptyMessage: 'All items are above their reorder levels. Stock looks healthy!' };
+      const rows = data.slice(0, 6).map(p => ({
+        label: p.product_name || p.name,
+        value: `${p.stock_quantity} left (reorder at ${p.reorder_level ?? '—'})`,
+        warning: true,
+      }));
+      return { title: `Low Stock Alert (${data.length} items)`, rows };
     }
 
     case 'total_revenue': {
       const rev    = data?.total ?? 0;
       const orders = data?.count ?? 0;
-      return `💰 *Total Revenue:* ₹${rev.toFixed(2)}\n🛒 From ${orders} orders`;
+      return {
+        title: 'Total Revenue',
+        rows: [
+          { label: 'Revenue', value: `₹${rev.toFixed(2)}` },
+          { label: 'Orders',  value: String(orders) },
+        ],
+      };
     }
 
     case 'pending_orders': {
       if (!data || data.length === 0)
-        return '✅ No pending orders right now — all caught up!';
-      const preview = data.slice(0, 3).map(o =>
-        `• ${o.order_id ? `#${o.order_id}` : 'Order'} — ${o.customer_name || 'Customer'} (${o.status || 'pending'})`
-      ).join('\n');
-      const more = data.length > 3 ? `\n…and ${data.length - 3} more` : '';
-      return `🛒 *Pending Orders: ${data.length}*\n${preview}${more}`;
+        return { title: 'Pending Orders', rows: [], empty: true, emptyMessage: 'No pending orders right now — all caught up!' };
+      const rows = data.slice(0, 3).map(o => ({
+        label: o.order_id ? `#${o.order_id}` : 'Order',
+        value: `${o.customer_name || 'Customer'} (${o.status || 'pending'})`,
+      }));
+      return { title: `Pending Orders: ${data.length}`, rows, totalCount: data.length };
     }
 
     case 'dead_inventory': {
       if (!data || data.length === 0)
-        return '✅ All stocked products have at least one sale. No dead inventory!';
-      const list = data.slice(0, 5).map(p =>
-        `• ${p.product_name || p.name} — ${p.stock_quantity} in stock, 0 orders`
-      ).join('\n');
-      return `💤 *Dead Inventory (${data.length} items not selling):*\n${list}`;
+        return { title: 'Dead Inventory', rows: [], empty: true, emptyMessage: 'All stocked products have at least one sale. No dead inventory!' };
+      const rows = data.slice(0, 5).map(p => ({
+        label: p.product_name || p.name,
+        value: `${p.stock_quantity} in stock, 0 orders`,
+      }));
+      return { title: `Dead Inventory (${data.length} items not selling)`, rows };
     }
 
     case 'avg_order_value': {
       const avg   = data?.avg   ?? 0;
       const count = data?.count ?? 0;
-      return `📊 *Average Order Value:* ₹${avg.toFixed(2)}\n📦 Across ${count} orders`;
+      return {
+        title: 'Average Order Value',
+        rows: [
+          { label: 'Average Order Value', value: `₹${avg.toFixed(2)}` },
+          { label: 'Orders',              value: String(count) },
+        ],
+      };
     }
 
     case 'top_customers': {
       if (!data || data.length === 0)
-        return '👤 No customer order data yet. Upload your orders Excel to see top buyers!';
-      const list = data.slice(0, 5).map((c, i) =>
-        `${i + 1}. ${c.customer_name || 'Customer'} — ${c.orderCount} orders · ₹${(c.totalSpent || 0).toFixed(2)}`
-      ).join('\n');
-      return `👑 *Top Customers:*\n${list}`;
+        return { title: 'Top Customers', rows: [], empty: true, emptyMessage: 'No customer order data yet. Upload your orders Excel to see top buyers!' };
+      const rows = data.slice(0, 5).map((c, i) => ({
+        label: `${i + 1}. ${c.customer_name || 'Customer'}`,
+        value: `${c.orderCount} orders · ₹${(c.totalSpent || 0).toFixed(2)}`,
+      }));
+      return { title: 'Top Customers', rows };
     }
 
     case 'repeat_customers': {
       const count = data?.repeatCount ?? 0;
       const pct   = data?.percentage  ?? 0;
-      if (count === 0) return '👤 No repeat customers yet. Keep selling — they will come back!';
-      return `🔄 *Repeat Customers:* ${count} buyers\n📈 ${pct.toFixed(1)}% of all your customers have ordered more than once`;
+      if (count === 0)
+        return { title: 'Repeat Customers', rows: [], empty: true, emptyMessage: 'No repeat customers yet. Keep selling — they will come back!' };
+      return {
+        title: 'Repeat Customers',
+        rows: [
+          { label: 'Repeat Buyers',      value: String(count) },
+          { label: 'Of All Customers',   value: `${pct.toFixed(1)}%` },
+        ],
+      };
     }
 
     case 'best_day': {
       if (!data || data.length === 0)
-        return '📅 Not enough order history yet to identify peak days.';
-      const top = data[0];
-      const rest = data.slice(1, 3).map(d => `• ${d._id} — ${d.count} orders`).join('\n');
-      return (
-        `📅 *Best Sales Day:* ${top._id}\n` +
-        `🛒 ${top.count} orders | ₹${(top.revenue || 0).toFixed(2)}\n` +
-        (rest ? `\nRunner-ups:\n${rest}` : '')
-      ).trim();
+        return { title: 'Best Sales Day', rows: [], empty: true, emptyMessage: 'Not enough order history yet to identify peak days.' };
+      const top  = data[0];
+      const rows = [
+        { label: top._id, value: `${top.count} orders | ₹${(top.revenue || 0).toFixed(2)}`, isTop: true },
+        ...data.slice(1, 3).map(d => ({ label: d._id, value: `${d.count} orders` })),
+      ];
+      return { title: 'Best Sales Day', rows };
     }
 
     case 'best_category': {
       if (!data || data.length === 0)
-        return '📂 No category data yet. Make sure your products Excel has a Category column.';
-      const list = data.slice(0, 5).map((c, i) =>
-        `${i + 1}. ${c._id || 'Uncategorized'} — ${c.count} products`
-      ).join('\n');
-      return `📂 *Top Categories:*\n${list}`;
+        return { title: 'Top Categories', rows: [], empty: true, emptyMessage: 'No category data yet. Make sure your products Excel has a Category column.' };
+      const rows = data.slice(0, 5).map((c, i) => ({
+        label: `${i + 1}. ${c._id || 'Uncategorized'}`,
+        value: `${c.count} products`,
+      }));
+      return { title: 'Top Categories', rows };
     }
 
     case 'order_timing': {
       if (!data || data.length === 0)
-        return '⏰ Not enough order history for timing analysis yet.';
-      const top = data[0];
-      const hour = top._id;
-      const label = hour < 12 ? 'AM' : 'PM';
+        return { title: 'Peak Order Hour', rows: [], empty: true, emptyMessage: 'Not enough order history for timing analysis yet.' };
+      const top         = data[0];
+      const hour        = top._id;
+      const label       = hour < 12 ? 'AM' : 'PM';
       const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-      return `⏰ *Peak Order Hour:* ${displayHour}${label}\n🛒 ${top.count} orders usually come in at this time`;
+      return {
+        title: 'Peak Order Hour',
+        rows: [
+          { label: `${displayHour}${label}`, value: `${top.count} orders usually come in at this time` },
+        ],
+      };
     }
 
     case 'growth_advice':
@@ -264,10 +300,21 @@ function formatAnalyticsReply(intent_id, data) {
   }
 }
 
+// ─── Compatibility wrapper ────────────────────────────────────────────────
+// Keeps the public API identical for every existing caller (meta-whatsapp.js,
+// server.js). Internally calls buildAnalyticsData() → formatForWhatsApp().
+// The string returned is byte-for-byte identical to the old implementation.
+
+function formatAnalyticsReply(intent_id, data) {
+  const structured = buildAnalyticsData(intent_id, data);
+  return formatForWhatsApp(intent_id, structured);
+}
+
 module.exports = {
   routePathway,
   resolveAnalyticsIntent,
   formatAnalyticsReply,
+  buildAnalyticsData,
   // Exported for unit testing
   isDangerous,
   isGreeting,

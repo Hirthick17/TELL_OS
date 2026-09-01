@@ -20,6 +20,7 @@ const {
   storeMissedIntent,
   backfillCorrectIntent,
 } = require('./missed-intents');
+const { normalizeWhatsAppMessage } = require('./adapters/normalizer');
 
 // ─── REMOVED: Old ERP INTENT_TO_QUERY mapping ───────────────────────────────
 // The system is now fully flexible and dataset-centric. No more hardcoded
@@ -659,6 +660,7 @@ async function handleWebhook(req, res) {
       for (const msg of msgs) {
         const waId = msg.from;
         console.log(`\n📨 ${waId} [${msg.type}]`);
+        console.log('[normalizer]', JSON.stringify(normalizeWhatsAppMessage(waId, msg, hostUrl), null, 2));
 
         try {
           if (msg.type === 'text') {

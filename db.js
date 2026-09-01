@@ -35,6 +35,7 @@ async function createIndexes(db) {
 
   await db.collection('conversations').createIndex({ sessionId: 1 }, { unique: true });
   await db.collection('conversations').createIndex({ phoneNumber: 1 }, { sparse: true });
+  await db.collection('conversations').createIndex({ sessionKey: 1 }, { sparse: true });
   await db.collection('sessions').createIndex({ id: 1 }, { unique: true });
 
   await db.collection('missed_intents').createIndex({ 'session_snapshot.merchant_id': 1, resolved: 1, created_at: -1 });
